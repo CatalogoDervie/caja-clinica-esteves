@@ -23,14 +23,12 @@ service cloud.firestore {
     }
 
     function isDoctor() {
-      return activeProfile()
-        && profile().role == 'medico'
+      return profile().role == 'medico'
         && profile().clinica == 'AMBAS';
     }
 
     function isBranchAdmin() {
-      return activeProfile()
-        && profile().role == 'administrativo'
+      return profile().role == 'administrativo'
         && profile().clinica in ['CDU', 'GUA'];
     }
 
@@ -68,14 +66,7 @@ service cloud.firestore {
     }
 
     function validMovement(data) {
-      return data.keys().hasAll([
-          'fecha', 'fechaKey', 'clinica', 'pacienteDetalle',
-          'coberturaTipo', 'obraSocial', 'concepto', 'estudio',
-          'tieneCoseguro', 'medioPago', 'moneda', 'importe',
-          'tipoMovimiento', 'notas', 'anulado', 'source',
-          'createdAt', 'updatedAt'
-        ])
-        && data.keys().hasOnly([
+      return data.keys().hasOnly([
           'fecha', 'fechaKey', 'clinica', 'pacienteDetalle',
           'coberturaTipo', 'obraSocial', 'concepto', 'estudio',
           'tieneCoseguro', 'medioPago', 'moneda', 'importe',
@@ -152,7 +143,6 @@ service cloud.firestore {
 
       allow update: if activeProfile()
         && isOwnBranch(resource.data.clinica)
-        && isOwnBranch(request.resource.data.clinica)
         && resource.data.clinica == request.resource.data.clinica
         && resource.data.fecha == request.resource.data.fecha
         && resource.data.fechaKey == request.resource.data.fechaKey
@@ -169,14 +159,7 @@ service cloud.firestore {
     }
 
     function validClosure(data) {
-      return data.keys().hasAll([
-          'fecha', 'fechaKey', 'clinica', 'saldoInicialARS',
-          'saldoInicialUSD', 'efectivoEsperadoARS',
-          'efectivoEsperadoUSD', 'efectivoRealARS',
-          'efectivoRealUSD', 'diferenciaARS', 'diferenciaUSD',
-          'cerradoAt'
-        ])
-        && data.keys().hasOnly([
+      return data.keys().hasOnly([
           'fecha', 'fechaKey', 'clinica', 'saldoInicialARS',
           'saldoInicialUSD', 'efectivoEsperadoARS',
           'efectivoEsperadoUSD', 'efectivoRealARS',
@@ -213,12 +196,12 @@ service cloud.firestore {
         && validClosure(request.resource.data);
 
       allow update: if false;
-      allow delete: if isDoctor();
+      allow delete: if activeProfile() && isDoctor();
     }
 
     match /configuracion/{configId} {
       allow read: if activeProfile();
-      allow create, update: if isDoctor();
+      allow create, update: if activeProfile() && isDoctor();
       allow delete: if false;
     }
 
