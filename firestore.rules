@@ -186,7 +186,11 @@ service cloud.firestore {
     }
 
     match /cierres/{closureId} {
-      allow get, list: if activeProfile() && canReadOperatingDay(resource.data);
+      allow get: if activeProfile()
+        && (isDoctor()
+          || (isBranchAdmin()
+            && closureId == profile().clinica + '_' + string(argentinaDateKey())));
+      allow list: if activeProfile() && canReadOperatingDay(resource.data);
 
       allow create: if activeProfile()
         && closureId == request.resource.data.clinica + '_' + string(request.resource.data.fechaKey)

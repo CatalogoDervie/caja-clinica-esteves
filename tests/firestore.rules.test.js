@@ -219,6 +219,13 @@ describe('escrituras y validación', () => {
 });
 
 describe('cierres', () => {
+  it('permite consultar el cierre propio de hoy aunque todavía no exista', async () => {
+    const cdu = testEnv.authenticatedContext('cdu').firestore();
+    const id = `CDU_${dateKey(argentinaDate())}`;
+    const snapshot = await assertSucceeds(getDoc(doc(cdu, `cierres/${id}`)));
+    expect(snapshot.exists()).toBe(false);
+  });
+
   it('cada administrativa cierra únicamente su sede y no duplica el cierre', async () => {
     const cdu = testEnv.authenticatedContext('cdu').firestore();
     const id = `CDU_${dateKey(argentinaDate())}`;
