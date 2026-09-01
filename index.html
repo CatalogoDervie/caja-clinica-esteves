@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b5d58" />
+    <meta name="description" content="Caja online de Concepción del Uruguay y Gualeguaychú · Centro de Ojos Esteves" />
+    <title>Caja · Centro de Ojos Esteves</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="loadingView" class="center-screen">
+      <div class="loading-mark" aria-hidden="true"></div>
+      <p>Abriendo la caja…</p>
+    </div>
+
+    <main id="setupView" class="center-screen" hidden>
+      <section class="access-card setup-card">
+        <div class="brand-mark" aria-hidden="true">CO</div>
+        <p class="eyebrow">Centro de Ojos Esteves</p>
+        <h1>Configuración pendiente</h1>
+        <p>La interfaz está lista, pero todavía falta vincular el proyecto Firebase exclusivo de Caja.</p>
+        <p class="muted">No se conectó ni modificó ningún otro sistema.</p>
+      </section>
+    </main>
+
+    <main id="loginView" class="login-layout" hidden>
+      <section class="login-brand">
+        <div class="brand-mark large" aria-hidden="true">CO</div>
+        <p class="eyebrow">Centro de Ojos Esteves</p>
+        <h1>Caja de la clínica</h1>
+        <p>Concepción del Uruguay y Gualeguaychú, separadas y siempre actualizadas.</p>
+      </section>
+      <section class="access-card">
+        <p class="eyebrow">Acceso seguro</p>
+        <h2>Ingresar</h2>
+        <form id="loginForm" novalidate>
+          <label class="field">
+            <span>Correo electrónico</span>
+            <input id="loginEmail" name="email" type="email" autocomplete="username" required />
+          </label>
+          <label class="field">
+            <span>Contraseña</span>
+            <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p id="loginError" class="form-error" role="alert" hidden></p>
+          <button id="loginButton" class="button primary full" type="submit">Ingresar</button>
+        </form>
+        <div id="emulatorLogins" class="dev-logins" hidden>
+          <p>Accesos de prueba</p>
+          <button type="button" data-dev-login="CDU">CDU</button>
+          <button type="button" data-dev-login="GUA">GUA</button>
+          <button type="button" data-dev-login="MEDICO">Médico</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="appView" class="app-shell" hidden>
+      <header class="app-header">
+        <div class="header-inner">
+          <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true">CO</div>
+            <div>
+              <strong>Caja · Centro de Ojos Esteves</strong>
+              <span id="headerContext">—</span>
+            </div>
+          </div>
+          <nav id="desktopNav" class="desktop-nav" aria-label="Secciones">
+            <button class="nav-button active" type="button" data-view="today">Hoy</button>
+            <button class="nav-button doctor-only" type="button" data-view="month">Mes</button>
+            <button class="nav-button doctor-only" type="button" data-view="history">Historial</button>
+            <button class="nav-button doctor-only" type="button" data-view="backup">Respaldo</button>
+          </nav>
+          <div class="user-actions">
+            <div class="profile-copy">
+              <strong id="profileLabel">—</strong>
+              <span id="syncStatus">Conectando…</span>
+            </div>
+            <button id="logoutButton" class="icon-button" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">Salir</button>
+          </div>
+        </div>
+      </header>
+
+      <div id="offlineBanner" class="status-banner" role="status" hidden>
+        Sin conexión. Conservamos la pantalla abierta y reintentaremos automáticamente.
+      </div>
+
+      <main class="workspace">
+        <section id="todaySection" class="view-section active" data-section="today">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">Operatoria diaria</p>
+              <h1 id="todayTitle">Caja de hoy</h1>
+              <p id="todaySubtitle" class="muted"></p>
+            </div>
+            <div class="heading-actions">
+              <label class="compact-field doctor-only">
+                <span>Sede</span>
+                <select id="dayScope">
+                  <option value="AMBAS">Ambas</option>
+                  <option value="CDU">CDU</option>
+                  <option value="GUA">Gualeguaychú</option>
+                </select>
+              </label>
+              <label class="compact-field doctor-only">
+                <span>Fecha</span>
+                <input id="dayDate" type="date" />
+              </label>
+              <button id="newMovementButton" class="button primary" type="button">+ Nuevo movimiento</button>
+            </div>
+          </div>
+
+          <div id="todayMetrics" class="currency-panels"></div>
+
+          <div class="today-layout">
+            <section class="panel movements-panel">
+              <div class="panel-heading">
+                <div>
+                  <h2>Movimientos</h2>
+                  <p id="movementCount" class="muted"></p>
+                </div>
+                <label class="search-field">
+                  <span class="sr-only">Buscar movimiento</span>
+                  <input id="daySearch" type="search" placeholder="Buscar paciente o detalle" />
+                </label>
+              </div>
+              <div id="todayTable" class="desktop-data"></div>
+              <div id="todayCards" class="mobile-data"></div>
+            </section>
+
+            <aside id="closurePanel" class="panel closure-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Efectivo físico</p>
+                  <h2>Cierre del día</h2>
+                </div>
+                <span id="closureBadge" class="badge success">Abierta</span>
+              </div>
+              <div id="closureBody"></div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="monthSection" class="view-section doctor-only" data-section="month">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">Control mensual</p>
+              <h1>Resumen del mes</h1>
+              <p class="muted">ARS y USD se muestran por separado.</p>
+            </div>
+            <div class="heading-actions">
+              <label class="compact-field">
+                <span>Sede</span>
+                <select id="monthScope">
+                  <option value="AMBAS">Ambas</option>
+                  <option value="CDU">CDU</option>
+                  <option value="GUA">Gualeguaychú</option>
+                </select>
+              </label>
+              <label class="compact-field">
+                <span>Mes</span>
+                <input id="monthDate" type="month" />
+              </label>
+            </div>
+          </div>
+          <div id="monthMetrics" class="currency-panels"></div>
+          <div class="summary-columns">
+            <section class="panel">
+              <div class="panel-heading"><h2>Por sede</h2></div>
+              <div id="monthByClinic"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><h2>Por concepto</h2></div>
+              <div id="monthByConcept"></div>
+            </section>
+          </div>
+          <section class="panel monthly-days-panel">
+            <div class="panel-heading"><h2>Detalle por día</h2></div>
+            <div id="monthDays" class="desktop-data"></div>
+            <div id="monthDayCards" class="mobile-data"></div>
+          </section>
+        </section>
+
+        <section id="historySection" class="view-section doctor-only" data-section="history">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">Consulta</p>
+              <h1>Historial</h1>
+              <p class="muted">Filtrá sin mezclar sedes ni monedas.</p>
+            </div>
+            <button id="applyHistoryButton" class="button primary" type="button">Buscar</button>
+          </div>
+          <section class="panel filter-panel">
+            <div class="history-filters">
+              <label class="field"><span>Desde</span><input id="historyFrom" type="date" /></label>
+              <label class="field"><span>Hasta</span><input id="historyTo" type="date" /></label>
+              <label class="field"><span>Sede</span><select id="historyClinic"><option value="AMBAS">Ambas</option><option value="CDU">CDU</option><option value="GUA">Gualeguaychú</option></select></label>
+              <label class="field"><span>Concepto</span><select id="historyConcept"><option value="">Todos</option><option>Consulta</option><option>Estudios</option><option>Cirugía</option><option>Lentes</option><option>Otros / Gasto</option></select></label>
+              <label class="field"><span>Cobertura</span><select id="historyCoverage"><option value="">Todas</option><option>Particular</option><option>Obra Social</option><option>Sin especificar</option></select></label>
+              <label class="field"><span>Obra social</span><input id="historyPlan" list="healthPlanSuggestions" /></label>
+              <label class="field"><span>Medio de pago</span><select id="historyPayment"><option value="">Todos</option><option>Efectivo</option><option>Transferencia</option><option>Otro</option></select></label>
+              <label class="field"><span>Moneda</span><select id="historyCurrency"><option value="">Todas</option><option>ARS</option><option>USD</option></select></label>
+              <label class="field"><span>Tipo</span><select id="historyType"><option value="">Todos</option><option>Ingreso</option><option>Egreso</option></select></label>
+              <label class="field wide"><span>Búsqueda libre</span><input id="historySearch" type="search" placeholder="Paciente, detalle, estudio…" /></label>
+              <label class="checkbox-field"><input id="historyVoided" type="checkbox" /><span>Incluir anulados</span></label>
+            </div>
+          </section>
+          <section class="panel history-results">
+            <div class="panel-heading"><h2 id="historyResultTitle">Resultados</h2></div>
+            <div id="historyTable" class="desktop-data"></div>
+            <div id="historyCards" class="mobile-data"></div>
+          </section>
+        </section>
+
+        <section id="backupSection" class="view-section doctor-only" data-section="backup">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">Respaldo</p>
+              <h1>Descargar Excel</h1>
+              <p class="muted">Incluye movimientos, cierres y resúmenes, con ARS y USD separados.</p>
+            </div>
+          </div>
+          <div class="backup-grid">
+            <section class="panel action-panel">
+              <div class="action-icon" aria-hidden="true">XLSX</div>
+              <h2>Respaldo completo</h2>
+              <p>Genera un archivo con MOVIMIENTOS, CIERRES, RESUMEN_DIARIO, RESUMEN_MENSUAL e INFO.</p>
+              <button id="backupButton" class="button primary" type="button">Descargar respaldo Excel</button>
+              <p id="backupStatus" class="muted" role="status"></p>
+            </section>
+            <section class="panel action-panel migration-panel">
+              <div class="action-icon neutral" aria-hidden="true">488</div>
+              <h2>Migración histórica CDU</h2>
+              <p>Herramienta inicial idempotente. El archivo con pacientes no forma parte de la publicación.</p>
+              <label class="button secondary file-button">
+                Elegir histórico preparado
+                <input id="historicalFile" type="file" accept="application/json,.json" hidden />
+              </label>
+              <button id="importHistoricalButton" class="button" type="button" disabled>Importar a Firestore</button>
+              <p id="migrationStatus" class="muted" role="status">Sin archivo seleccionado.</p>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <nav id="mobileNav" class="mobile-nav" aria-label="Secciones">
+        <button class="active" type="button" data-view="today"><span>Hoy</span></button>
+        <button class="doctor-only" type="button" data-view="month"><span>Mes</span></button>
+        <button class="doctor-only" type="button" data-view="history"><span>Historial</span></button>
+        <button class="doctor-only" type="button" data-view="backup"><span>Respaldo</span></button>
+      </nav>
+    </div>
+
+    <dialog id="movementDialog" class="dialog">
+      <form id="movementForm" method="dialog" novalidate>
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Caja operativa</p>
+            <h2 id="movementDialogTitle">Nuevo movimiento</h2>
+          </div>
+          <button id="closeMovementButton" class="icon-button" type="button" aria-label="Cerrar">×</button>
+        </div>
+        <div class="dialog-body">
+          <input id="movementId" type="hidden" />
+          <div class="form-grid">
+            <label id="movementClinicField" class="field"><span>Sede</span><select id="movementClinic"><option value="CDU">CDU</option><option value="GUA">Gualeguaychú</option></select></label>
+            <label class="field"><span>Fecha</span><input id="movementDate" type="date" required /></label>
+            <label class="field"><span>Tipo</span><select id="movementType"><option>Ingreso</option><option>Egreso</option></select></label>
+            <label class="field"><span>Medio de pago</span><select id="movementPayment"></select></label>
+            <label class="field wide"><span>Paciente / detalle</span><input id="movementDetail" maxlength="160" placeholder="Apellido y nombre o detalle" required /></label>
+            <label id="movementCoverageField" class="field"><span>Cobertura</span><select id="movementCoverage"><option>Particular</option><option>Obra Social</option></select></label>
+            <label id="movementHealthPlanField" class="field"><span>Obra social</span><input id="movementHealthPlan" list="healthPlanSuggestions" /></label>
+            <label id="movementConceptField" class="field"><span>Concepto</span><select id="movementConcept"><option>Consulta</option><option>Estudios</option><option>Cirugía</option><option>Lentes</option><option>Otros / Gasto</option></select></label>
+            <label id="movementStudyField" class="field"><span>Estudio realizado</span><select id="movementStudy"></select></label>
+            <fieldset id="movementCopayField" class="field radio-field">
+              <legend>¿Tiene coseguro?</legend>
+              <label><input type="radio" name="movementCopay" value="yes" /> Sí</label>
+              <label><input type="radio" name="movementCopay" value="no" /> No</label>
+            </fieldset>
+            <label class="field"><span>Importe</span><input id="movementAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0" required /></label>
+            <label class="currency-switch"><input id="movementUsd" type="checkbox" /><span><strong>USD</strong><small>Destildado = pesos argentinos</small></span></label>
+            <label class="field wide"><span>Observación</span><textarea id="movementNotes" rows="2" maxlength="300" placeholder="Opcional"></textarea></label>
+          </div>
+          <p id="movementError" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="dialog-actions">
+          <button id="cancelMovementButton" class="button secondary" type="button">Cancelar</button>
+          <button id="saveMovementButton" class="button primary" type="submit">Guardar movimiento</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog" class="dialog confirm-dialog">
+      <form method="dialog">
+        <div class="dialog-body">
+          <h2 id="confirmTitle">Confirmar</h2>
+          <p id="confirmMessage"></p>
+        </div>
+        <div class="dialog-actions">
+          <button id="confirmCancel" class="button secondary" value="cancel">Cancelar</button>
+          <button id="confirmAccept" class="button danger" value="confirm">Confirmar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <datalist id="healthPlanSuggestions"></datalist>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

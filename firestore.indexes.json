@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "movimientos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clinica", "order": "ASCENDING" },
+        { "fieldPath": "fechaKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cierres",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clinica", "order": "ASCENDING" },
+        { "fieldPath": "fechaKey", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,28 @@
+{
+  "name": "caja-clinica-esteves",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run tests/logic.test.js tests/export-excel.test.js tests/historical.test.js tests/responsive-structure.test.js",
+    "test:watch": "vitest",
+    "test:rules": "firebase emulators:exec --only firestore \"vitest run tests/firestore.rules.test.js\" --project demo-caja-clinica",
+    "test:all": "npm run test && npm run test:rules && npm run build",
+    "validate:env": "node scripts/validate-env.mjs",
+    "prepare:historical": "node scripts/prepare-historical.mjs",
+    "seed:emulator": "node scripts/seed-emulator.mjs"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "firebase": "12.18.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase-tools": "15.28.2",
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
+  }
+}

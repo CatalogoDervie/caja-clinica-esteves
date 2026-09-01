@@ -1,0 +1,229 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasProfile() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function activeProfile() {
+      return hasProfile()
+        && profile().active == true
+        && profile().role in ['administrativo', 'medico']
+        && profile().clinica in ['CDU', 'GUA', 'AMBAS'];
+    }
+
+    function isDoctor() {
+      return activeProfile()
+        && profile().role == 'medico'
+        && profile().clinica == 'AMBAS';
+    }
+
+    function isBranchAdmin() {
+      return activeProfile()
+        && profile().role == 'administrativo'
+        && profile().clinica in ['CDU', 'GUA'];
+    }
+
+    function argentinaNow() {
+      return request.time - duration.value(3, 'h');
+    }
+
+    function argentinaDateKey() {
+      return argentinaNow().year() * 10000
+        + argentinaNow().month() * 100
+        + argentinaNow().day();
+    }
+
+    function isOwnBranch(clinica) {
+      return isDoctor()
+        || (isBranchAdmin() && profile().clinica == clinica);
+    }
+
+    function canReadOperatingDay(data) {
+      return isDoctor()
+        || (isBranchAdmin()
+          && profile().clinica == data.clinica
+          && data.fechaKey == argentinaDateKey());
+    }
+
+    function dateMatchesKey(data) {
+      return data.fecha.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && int(data.fecha[0:4]) * 10000
+          + int(data.fecha[5:7]) * 100
+          + int(data.fecha[8:10]) == data.fechaKey
+        && int(data.fecha[5:7]) >= 1
+        && int(data.fecha[5:7]) <= 12
+        && int(data.fecha[8:10]) >= 1
+        && int(data.fecha[8:10]) <= 31;
+    }
+
+    function validMovement(data) {
+      return data.keys().hasAll([
+          'fecha', 'fechaKey', 'clinica', 'pacienteDetalle',
+          'coberturaTipo', 'obraSocial', 'concepto', 'estudio',
+          'tieneCoseguro', 'medioPago', 'moneda', 'importe',
+          'tipoMovimiento', 'notas', 'anulado', 'source',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'fecha', 'fechaKey', 'clinica', 'pacienteDetalle',
+          'coberturaTipo', 'obraSocial', 'concepto', 'estudio',
+          'tieneCoseguro', 'medioPago', 'moneda', 'importe',
+          'tipoMovimiento', 'notas', 'anulado', 'source',
+          'createdAt', 'updatedAt'
+        ])
+        && data.fecha is string
+        && data.fechaKey is int
+        && dateMatchesKey(data)
+        && data.clinica in ['CDU', 'GUA']
+        && data.pacienteDetalle is string
+        && data.pacienteDetalle.size() <= 160
+        && (data.source == 'historico-cdu' || data.pacienteDetalle.size() > 0)
+        && data.coberturaTipo in ['Particular', 'Obra Social', 'Sin especificar']
+        && data.obraSocial is string
+        && data.obraSocial.size() <= 120
+        && data.concepto in ['Consulta', 'Estudios', 'Cirugía', 'Lentes', 'Otros / Gasto']
+        && (data.estudio == null || data.estudio is string)
+        && (data.tieneCoseguro == null || data.tieneCoseguro is bool)
+        && data.medioPago in ['Efectivo', 'Transferencia', 'Otro']
+        && data.moneda in ['ARS', 'USD']
+        && data.importe is number
+        && data.importe >= 0
+        && (data.source == 'historico-cdu' || data.importe > 0)
+        && data.tipoMovimiento in ['Ingreso', 'Egreso']
+        && data.notas is string
+        && data.notas.size() <= 300
+        && data.anulado is bool
+        && data.source in ['manual', 'historico-cdu']
+        && (data.source != 'historico-cdu' || data.clinica == 'CDU')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (data.concepto != 'Estudios'
+          || (data.estudio is string && data.estudio.size() > 0))
+        && (data.concepto != 'Cirugía'
+          || data.coberturaTipo != 'Obra Social'
+          || data.tieneCoseguro is bool)
+        && (data.coberturaTipo == 'Obra Social'
+          ? data.obraSocial.size() > 0
+          : data.obraSocial.size() == 0)
+        && (data.concepto == 'Estudios'
+          || data.estudio == null)
+        && (data.concepto == 'Cirugía'
+          || data.tieneCoseguro == null)
+        && (data.tipoMovimiento != 'Egreso'
+          || (data.concepto == 'Otros / Gasto'
+            && data.coberturaTipo == 'Particular'
+            && data.obraSocial.size() == 0
+            && data.estudio == null
+            && data.tieneCoseguro == null));
+    }
+
+    function isOpenMovement(data) {
+      return !exists(/databases/$(database)/documents/cierres/$(data.clinica + '_' + string(data.fechaKey)));
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /movimientos/{movementId} {
+      allow get, list: if activeProfile() && canReadOperatingDay(resource.data);
+
+      allow create: if activeProfile()
+        && isOwnBranch(request.resource.data.clinica)
+        && (isDoctor() || request.resource.data.fechaKey == argentinaDateKey())
+        && (isDoctor() || request.resource.data.source == 'manual')
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && validMovement(request.resource.data)
+        && (isOpenMovement(request.resource.data)
+          || (isDoctor() && request.resource.data.source == 'historico-cdu'));
+
+      allow update: if activeProfile()
+        && isOwnBranch(resource.data.clinica)
+        && isOwnBranch(request.resource.data.clinica)
+        && resource.data.clinica == request.resource.data.clinica
+        && resource.data.fecha == request.resource.data.fecha
+        && resource.data.fechaKey == request.resource.data.fechaKey
+        && resource.data.createdAt == request.resource.data.createdAt
+        && resource.data.source == request.resource.data.source
+        && (!resource.data.anulado || request.resource.data.anulado)
+        && (isDoctor() || resource.data.fechaKey == argentinaDateKey())
+        && request.resource.data.updatedAt == request.time
+        && validMovement(request.resource.data)
+        && (isOpenMovement(resource.data)
+          || (isDoctor() && resource.data.source == 'historico-cdu'));
+
+      allow delete: if false;
+    }
+
+    function validClosure(data) {
+      return data.keys().hasAll([
+          'fecha', 'fechaKey', 'clinica', 'saldoInicialARS',
+          'saldoInicialUSD', 'efectivoEsperadoARS',
+          'efectivoEsperadoUSD', 'efectivoRealARS',
+          'efectivoRealUSD', 'diferenciaARS', 'diferenciaUSD',
+          'cerradoAt'
+        ])
+        && data.keys().hasOnly([
+          'fecha', 'fechaKey', 'clinica', 'saldoInicialARS',
+          'saldoInicialUSD', 'efectivoEsperadoARS',
+          'efectivoEsperadoUSD', 'efectivoRealARS',
+          'efectivoRealUSD', 'diferenciaARS', 'diferenciaUSD',
+          'cerradoAt'
+        ])
+        && data.fecha is string
+        && data.fechaKey is int
+        && dateMatchesKey(data)
+        && data.clinica in ['CDU', 'GUA']
+        && data.saldoInicialARS is number
+        && data.saldoInicialUSD is number
+        && data.efectivoEsperadoARS is number
+        && data.efectivoEsperadoUSD is number
+        && data.efectivoRealARS is number
+        && data.efectivoRealUSD is number
+        && data.diferenciaARS is number
+        && data.diferenciaUSD is number
+        && data.cerradoAt is timestamp
+        && data.saldoInicialARS >= 0
+        && data.saldoInicialUSD >= 0
+        && data.efectivoRealARS >= 0
+        && data.efectivoRealUSD >= 0;
+    }
+
+    match /cierres/{closureId} {
+      allow get, list: if activeProfile() && canReadOperatingDay(resource.data);
+
+      allow create: if activeProfile()
+        && closureId == request.resource.data.clinica + '_' + string(request.resource.data.fechaKey)
+        && isOwnBranch(request.resource.data.clinica)
+        && (isDoctor() || request.resource.data.fechaKey == argentinaDateKey())
+        && request.resource.data.cerradoAt == request.time
+        && validClosure(request.resource.data);
+
+      allow update: if false;
+      allow delete: if isDoctor();
+    }
+
+    match /configuracion/{configId} {
+      allow read: if activeProfile();
+      allow create, update: if isDoctor();
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
