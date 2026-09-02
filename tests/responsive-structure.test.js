@@ -33,4 +33,14 @@ describe('estructura responsive y separación de roles', () => {
     expect(html).toContain('id="movementUsd" type="checkbox"');
     expect(html).toContain('Destildado = pesos argentinos');
   });
+
+  it('presenta el historial como análisis y relega pacientes al detalle secundario', () => {
+    expect(html).toContain('id="historyNarrativeTitle"');
+    expect(html).toContain('id="historyNetTrend"');
+    expect(html).toContain('id="historyConceptComposition"');
+    expect(html).toContain('id="historyClinicComparison"');
+    expect(html).toContain('id="historyConceptTrend"');
+    expect(html).toMatch(/<details class="panel history-detail-panel">[\s\S]*id="historyTable"/);
+    expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.history-story-grid \{ grid-template-columns: 1fr; \}/);
+  });
 });

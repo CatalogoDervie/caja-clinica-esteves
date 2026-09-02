@@ -189,6 +189,89 @@ export function summarizeMonthly(movements) {
     .sort((a, b) => a.mes.localeCompare(b.mes) || a.clinica.localeCompare(b.clinica));
 }
 
+export function percentageChange(current, previous) {
+  const currentValue = Number(current) || 0;
+  const previousValue = Number(previous) || 0;
+  if (previousValue === 0) return null;
+  return ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
+}
+
+export function previousPeriodBounds(from, to) {
+  const start = new Date(`${from}T12:00:00Z`);
+  const end = new Date(`${to}T12:00:00Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return null;
+  const days = Math.round((end - start) / 86400000) + 1;
+  const previousTo = new Date(start);
+  previousTo.setUTCDate(previousTo.getUTCDate() - 1);
+  const previousFrom = new Date(previousTo);
+  previousFrom.setUTCDate(previousFrom.getUTCDate() - days + 1);
+  return {
+    from: previousFrom.toISOString().slice(0, 10),
+    to: previousTo.toISOString().slice(0, 10),
+  };
+}
+
+export function analyzeHistory(movements, previousMovements = []) {
+  const active = (movements || []).filter((item) => !item.anulado);
+  const previousActive = (previousMovements || []).filter((item) => !item.anulado);
+  const totals = calculateTotals(active);
+  const previousTotals = calculateTotals(previousActive);
+
+  const months = new Map();
+  for (const movement of active) {
+    const month = String(movement.fecha || '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) continue;
+    if (!months.has(month)) months.set(month, []);
+    months.get(month).push(movement);
+  }
+
+  const byMonth = [...months.entries()]
+    .map(([month, items]) => ({ month, ...calculateTotals(items) }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+
+  const byConcept = CONCEPTS.map((concept) => ({
+    concept,
+    ...calculateTotals(active.filter((item) => item.concepto === concept)),
+  })).sort((a, b) => b.ARS.ingresos - a.ARS.ingresos || b.USD.ingresos - a.USD.ingresos);
+
+  const byClinic = CLINICS.map((clinic) => ({
+    clinic,
+    ...calculateTotals(active.filter((item) => item.clinica === clinic)),
+  }));
+
+  const topConcept = byConcept.find((item) => item.ARS.ingresos > 0 || item.USD.ingresos > 0) || byConcept[0];
+  const bestMonth = byMonth.reduce((best, item) => (
+    !best || item.ARS.neto > best.ARS.neto ? item : best
+  ), null);
+  const leadingClinic = byClinic.reduce((best, item) => (
+    !best || item.ARS.ingresos > best.ARS.ingresos ? item : best
+  ), null);
+  const totalClinicIncome = byClinic.reduce((sum, item) => sum + item.ARS.ingresos, 0);
+
+  return {
+    totals,
+    previousTotals,
+    variations: {
+      arsIncome: percentageChange(totals.ARS.ingresos, previousTotals.ARS.ingresos),
+      arsNet: percentageChange(totals.ARS.neto, previousTotals.ARS.neto),
+      usdIncome: percentageChange(totals.USD.ingresos, previousTotals.USD.ingresos),
+      usdNet: percentageChange(totals.USD.neto, previousTotals.USD.neto),
+    },
+    byMonth,
+    byConcept,
+    byClinic,
+    topConcept,
+    bestMonth,
+    leadingClinic,
+    leadingClinicShare: leadingClinic && totalClinicIncome > 0
+      ? (leadingClinic.ARS.ingresos / totalClinicIncome) * 100
+      : 0,
+    expenseWeight: totals.ARS.ingresos > 0
+      ? (totals.ARS.egresos / totals.ARS.ingresos) * 100
+      : 0,
+  };
+}
+
 export function filterMovements(movements, filters = {}) {
   const search = normalizeText(filters.search);
   return (movements || []).filter((movement) => {

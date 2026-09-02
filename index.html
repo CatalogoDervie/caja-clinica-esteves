@@ -183,34 +183,74 @@
         </section>
 
         <section id="historySection" class="view-section doctor-only" data-section="history">
-          <div class="page-heading">
-            <div>
-              <p class="eyebrow">Consulta</p>
-              <h1>Historial</h1>
-              <p class="muted">Filtrá sin mezclar sedes ni monedas.</p>
+          <header class="history-hero">
+            <div class="history-hero-copy">
+              <p class="eyebrow">Lectura ejecutiva</p>
+              <h1 id="historyNarrativeTitle">La facturación del período, en perspectiva</h1>
+              <p id="historyNarrativeSubtitle" class="muted">Ingresos, egresos y tendencias sin exponer información de pacientes.</p>
+              <div id="historyInsightChips" class="insight-chips" aria-live="polite"></div>
             </div>
-            <button id="applyHistoryButton" class="button primary" type="button">Buscar</button>
+            <div class="history-primary-filters" aria-label="Filtros principales del historial">
+              <label class="compact-field"><span>Desde</span><input id="historyFrom" type="date" /></label>
+              <label class="compact-field"><span>Hasta</span><input id="historyTo" type="date" /></label>
+              <label class="compact-field"><span>Sede</span><select id="historyClinic"><option value="AMBAS">Ambas</option><option value="CDU">CDU</option><option value="GUA">Gualeguaychú</option></select></label>
+              <button id="applyHistoryButton" class="button primary" type="button">Actualizar análisis</button>
+            </div>
+          </header>
+
+          <section id="historyKpis" class="history-kpis" aria-label="Indicadores principales"></section>
+
+          <div class="history-story-grid">
+            <section class="panel story-card story-card-wide">
+              <div class="story-card-heading">
+                <div><p class="eyebrow">Tendencia principal</p><h2 id="historyTrendTitle">El neto ARS a través del tiempo</h2></div>
+                <span class="chart-note">El último mes se destaca en verde</span>
+              </div>
+              <div id="historyNetTrend" class="chart-stage"></div>
+            </section>
+
+            <section class="panel story-card">
+              <div class="story-card-heading"><div><p class="eyebrow">Composición</p><h2>Qué conceptos explican los ingresos</h2></div></div>
+              <div id="historyConceptComposition" class="chart-stage compact"></div>
+            </section>
+
+            <section class="panel story-card">
+              <div class="story-card-heading"><div><p class="eyebrow">Sedes</p><h2 id="historyClinicTitle">Cómo se distribuye la facturación</h2></div></div>
+              <div id="historyClinicComparison" class="chart-stage compact"></div>
+            </section>
+
+            <section class="panel story-card story-card-wide">
+              <div class="story-card-heading concept-trend-heading">
+                <div><p class="eyebrow">Evolución por concepto</p><h2>Cómo cambió cada línea de actividad</h2></div>
+                <label class="compact-field"><span>Concepto</span><select id="historyTrendConcept"><option>Consulta</option><option>Estudios</option><option>Cirugía</option><option>Lentes</option><option>Otros / Gasto</option></select></label>
+              </div>
+              <div id="historyConceptTrend" class="chart-stage"></div>
+            </section>
           </div>
-          <section class="panel filter-panel">
-            <div class="history-filters">
-              <label class="field"><span>Desde</span><input id="historyFrom" type="date" /></label>
-              <label class="field"><span>Hasta</span><input id="historyTo" type="date" /></label>
-              <label class="field"><span>Sede</span><select id="historyClinic"><option value="AMBAS">Ambas</option><option value="CDU">CDU</option><option value="GUA">Gualeguaychú</option></select></label>
-              <label class="field"><span>Concepto</span><select id="historyConcept"><option value="">Todos</option><option>Consulta</option><option>Estudios</option><option>Cirugía</option><option>Lentes</option><option>Otros / Gasto</option></select></label>
-              <label class="field"><span>Cobertura</span><select id="historyCoverage"><option value="">Todas</option><option>Particular</option><option>Obra Social</option><option>Sin especificar</option></select></label>
-              <label class="field"><span>Obra social</span><input id="historyPlan" list="healthPlanSuggestions" /></label>
-              <label class="field"><span>Medio de pago</span><select id="historyPayment"><option value="">Todos</option><option>Efectivo</option><option>Transferencia</option><option>Otro</option></select></label>
-              <label class="field"><span>Moneda</span><select id="historyCurrency"><option value="">Todas</option><option>ARS</option><option>USD</option></select></label>
-              <label class="field"><span>Tipo</span><select id="historyType"><option value="">Todos</option><option>Ingreso</option><option>Egreso</option></select></label>
-              <label class="field wide"><span>Búsqueda libre</span><input id="historySearch" type="search" placeholder="Paciente, detalle, estudio…" /></label>
-              <label class="checkbox-field"><input id="historyVoided" type="checkbox" /><span>Incluir anulados</span></label>
+
+          <section class="panel history-insights-panel">
+            <div class="story-card-heading"><div><p class="eyebrow">Lectura final</p><h2>Lo que conviene mirar</h2></div></div>
+            <div id="historyInsights" class="narrative-insights"></div>
+          </section>
+
+          <details class="panel history-detail-panel">
+            <summary><span>Detalle de movimientos</span><small>Vista secundaria para revisar o exportar información operativa</small></summary>
+            <div class="history-detail-content">
+              <div class="history-filters">
+                <label class="field"><span>Concepto</span><select id="historyConcept"><option value="">Todos</option><option>Consulta</option><option>Estudios</option><option>Cirugía</option><option>Lentes</option><option>Otros / Gasto</option></select></label>
+                <label class="field"><span>Cobertura</span><select id="historyCoverage"><option value="">Todas</option><option>Particular</option><option>Obra Social</option><option>Sin especificar</option></select></label>
+                <label class="field"><span>Obra social</span><input id="historyPlan" list="healthPlanSuggestions" /></label>
+                <label class="field"><span>Medio de pago</span><select id="historyPayment"><option value="">Todos</option><option>Efectivo</option><option>Transferencia</option><option>Otro</option></select></label>
+                <label class="field"><span>Moneda</span><select id="historyCurrency"><option value="">Todas</option><option>ARS</option><option>USD</option></select></label>
+                <label class="field"><span>Tipo</span><select id="historyType"><option value="">Todos</option><option>Ingreso</option><option>Egreso</option></select></label>
+                <label class="field wide"><span>Búsqueda libre</span><input id="historySearch" type="search" placeholder="Paciente, detalle, estudio…" /></label>
+                <label class="checkbox-field"><input id="historyVoided" type="checkbox" /><span>Incluir anulados</span></label>
+              </div>
+              <div class="history-detail-heading"><h2 id="historyResultTitle">Movimientos del período</h2></div>
+              <div id="historyTable" class="desktop-data"></div>
+              <div id="historyCards" class="mobile-data"></div>
             </div>
-          </section>
-          <section class="panel history-results">
-            <div class="panel-heading"><h2 id="historyResultTitle">Resultados</h2></div>
-            <div id="historyTable" class="desktop-data"></div>
-            <div id="historyCards" class="mobile-data"></div>
-          </section>
+          </details>
         </section>
 
         <section id="backupSection" class="view-section doctor-only" data-section="backup">

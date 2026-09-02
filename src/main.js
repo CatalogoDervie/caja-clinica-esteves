@@ -5,6 +5,7 @@ import {
   signOut,
 } from 'firebase/auth';
 import {
+  analyzeHistory,
   argentinaDate,
   argentinaMonth,
   buildMovement,
@@ -14,6 +15,7 @@ import {
   filterMovements,
   formatDate,
   formatMoney,
+  previousPeriodBounds,
   summarizeByClinic,
   summarizeDaily,
   validateMovement,
@@ -58,6 +60,7 @@ const state = {
   closure: null,
   monthMovements: [],
   historySource: [],
+  historyPrevious: [],
   historyResults: [],
   selectedHistorical: null,
   unsubDay: null,
@@ -135,9 +138,9 @@ function currencyPanel(currency, totals) {
     <article class="currency-panel ${currency.toLowerCase()}">
       <div class="currency-title"><h2>${currency}</h2><span>${label}</span></div>
       <div class="metric-row">
+        <div class="metric-cell net-highlight"><span>Neto</span><strong class="${totals.neto < 0 ? 'negative' : ''}">${formatMoney(totals.neto, currency)}</strong></div>
         <div class="metric-cell"><span>Ingresos</span><strong class="positive">${formatMoney(totals.ingresos, currency)}</strong></div>
         <div class="metric-cell"><span>Egresos</span><strong class="negative">${formatMoney(totals.egresos, currency)}</strong></div>
-        <div class="metric-cell"><span>Neto</span><strong>${formatMoney(totals.neto, currency)}</strong></div>
         <div class="metric-cell"><span>Efectivo</span><strong>${formatMoney(totals.efectivo, currency)}</strong></div>
         <div class="metric-cell"><span>Transferencias</span><strong>${formatMoney(totals.transferencias, currency)}</strong></div>
       </div>
@@ -429,10 +432,193 @@ function historyFilters() {
   };
 }
 
+function historyPeriodLabel(from, to) {
+  return `${formatDate(from)} al ${formatDate(to)}`;
+}
+
+function monthLabel(month) {
+  const [year, monthNumber] = String(month).split('-').map(Number);
+  if (!year || !monthNumber) return month;
+  return new Intl.DateTimeFormat('es-AR', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(year, monthNumber - 1, 1)))
+    .replace('.', '');
+}
+
+function compactAmount(value, currency = 'ARS') {
+  return new Intl.NumberFormat('es-AR', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(Number(value) || 0) + (currency === 'USD' ? ' USD' : '');
+}
+
+function variationValue(current, previous) {
+  const currentValue = Number(current) || 0;
+  const previousValue = Number(previous) || 0;
+  if (previousValue === 0) return null;
+  return ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
+}
+
+function variationMarkup(current, previous, inverse = false) {
+  const variation = variationValue(current, previous);
+  if (variation === null) return '<span class="kpi-change neutral">Sin base comparable</span>';
+  const improving = inverse ? variation <= 0 : variation >= 0;
+  const arrow = variation > 0 ? '↑' : variation < 0 ? '↓' : '→';
+  return `<span class="kpi-change ${improving ? 'good' : 'bad'}">${arrow} ${Math.abs(variation).toFixed(1)}% vs. período anterior</span>`;
+}
+
+function renderHistoryKpis(analysis) {
+  const rows = [
+    ['Ingresos ARS', analysis.totals.ARS.ingresos, 'ARS', analysis.previousTotals.ARS.ingresos, false],
+    ['Egresos ARS', analysis.totals.ARS.egresos, 'ARS', analysis.previousTotals.ARS.egresos, true],
+    ['Neto ARS', analysis.totals.ARS.neto, 'ARS', analysis.previousTotals.ARS.neto, false, true],
+    ['Ingresos USD', analysis.totals.USD.ingresos, 'USD', analysis.previousTotals.USD.ingresos, false],
+    ['Neto USD', analysis.totals.USD.neto, 'USD', analysis.previousTotals.USD.neto, false, true],
+  ];
+  $('#historyKpis').innerHTML = rows.map(([label, value, currency, previous, inverse, featured]) => `
+    <article class="history-kpi ${featured ? 'featured' : ''}">
+      <span>${label}</span>
+      <strong class="${value < 0 ? 'negative' : ''}">${formatMoney(value, currency)}</strong>
+      ${variationMarkup(value, previous, inverse)}
+    </article>`).join('');
+}
+
+function verticalBarChart(rows, currency = 'ARS') {
+  if (!rows.length) return '<div class="chart-empty">No hay datos para graficar.</div>';
+  const width = Math.max(720, rows.length * 78 + 80);
+  const height = 270;
+  const left = 42;
+  const right = 24;
+  const top = 34;
+  const bottom = 58;
+  const plotHeight = height - top - bottom;
+  const values = rows.map((row) => Number(row.value) || 0);
+  const max = Math.max(0, ...values);
+  const min = Math.min(0, ...values);
+  const span = max - min || 1;
+  const y = (value) => top + ((max - value) / span) * plotHeight;
+  const zeroY = y(0);
+  const slot = (width - left - right) / rows.length;
+  const barWidth = Math.min(44, slot * 0.58);
+  const bars = rows.map((row, index) => {
+    const value = Number(row.value) || 0;
+    const valueY = y(value);
+    const rectY = Math.min(valueY, zeroY);
+    const rectHeight = Math.max(2, Math.abs(zeroY - valueY));
+    const x = left + slot * index + (slot - barWidth) / 2;
+    const fill = value < 0 ? 'var(--danger)' : row.highlight ? 'var(--brand)' : '#b8c2d0';
+    const labelY = value >= 0 ? Math.max(18, rectY - 8) : Math.min(height - bottom + 18, rectY + rectHeight + 16);
+    return `<g><rect x="${x}" y="${rectY}" width="${barWidth}" height="${rectHeight}" rx="7" fill="${fill}" />
+      <text x="${x + barWidth / 2}" y="${labelY}" text-anchor="middle" class="chart-value">${escapeHtml(compactAmount(value, currency))}</text>
+      <text x="${x + barWidth / 2}" y="${height - 22}" text-anchor="middle" class="chart-label">${escapeHtml(row.label)}</text></g>`;
+  }).join('');
+  return `<div class="svg-scroll"><svg class="story-chart" viewBox="0 0 ${width} ${height}" style="min-width:${width}px" role="img" aria-label="${escapeHtml(rows.map((row) => `${row.label}: ${formatMoney(row.value, currency)}`).join(', '))}">
+    <line x1="${left}" x2="${width - right}" y1="${zeroY}" y2="${zeroY}" class="chart-axis" />${bars}</svg></div>`;
+}
+
+function horizontalBarChart(rows, currency = 'ARS') {
+  if (!rows.length || rows.every((row) => !Number(row.value))) {
+    return '<div class="chart-empty">No hay ingresos para esta selección.</div>';
+  }
+  const max = Math.max(...rows.map((row) => Math.abs(Number(row.value) || 0)), 1);
+  return `<div class="horizontal-bars">${rows.map((row, index) => {
+    const value = Number(row.value) || 0;
+    const width = Math.max(value ? 4 : 0, (Math.abs(value) / max) * 100);
+    return `<div class="horizontal-bar-row">
+      <div class="horizontal-bar-label"><span>${escapeHtml(row.label)}</span><strong>${formatMoney(value, currency)}</strong></div>
+      <div class="horizontal-bar-track"><span style="width:${width}%;background:${value < 0 ? 'var(--danger)' : index === 0 ? 'var(--brand)' : '#aeb9c8'}"></span></div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function lineChart(rows, currency = 'ARS') {
+  if (!rows.length) return '<div class="chart-empty">No hay datos para graficar.</div>';
+  const width = Math.max(720, rows.length * 78 + 80);
+  const height = 270;
+  const left = 48;
+  const right = 28;
+  const top = 36;
+  const bottom = 58;
+  const values = rows.map((row) => Number(row.value) || 0);
+  const rawMax = Math.max(...values, 0);
+  const rawMin = Math.min(...values, 0);
+  const padding = (rawMax - rawMin || 1) * 0.12;
+  const max = rawMax + padding;
+  const min = rawMin - padding;
+  const x = (index) => rows.length === 1 ? width / 2 : left + ((width - left - right) * index) / (rows.length - 1);
+  const y = (value) => top + ((max - value) / (max - min || 1)) * (height - top - bottom);
+  const points = rows.map((row, index) => `${x(index)},${y(row.value)}`).join(' ');
+  const marks = rows.map((row, index) => `<g><circle cx="${x(index)}" cy="${y(row.value)}" r="5" class="line-point" />
+    <text x="${x(index)}" y="${height - 22}" text-anchor="middle" class="chart-label">${escapeHtml(row.label)}</text>
+    ${(rows.length <= 6 || index === rows.length - 1) ? `<text x="${x(index)}" y="${Math.max(18, y(row.value) - 12)}" text-anchor="middle" class="chart-value">${escapeHtml(compactAmount(row.value, currency))}</text>` : ''}</g>`).join('');
+  return `<div class="svg-scroll"><svg class="story-chart" viewBox="0 0 ${width} ${height}" style="min-width:${width}px" role="img"><line x1="${left}" x2="${width - right}" y1="${y(0)}" y2="${y(0)}" class="chart-axis" /><polyline points="${points}" class="line-series" />${marks}</svg></div>`;
+}
+
+function historyConclusion(analysis) {
+  const net = analysis.totals.ARS.neto;
+  const variation = analysis.variations.arsNet;
+  if (net < 0) return `El período cerró con un neto negativo de ${formatMoney(Math.abs(net), 'ARS')}`;
+  if (variation !== null && variation > 5) return `El neto ARS creció ${variation.toFixed(1)}% frente al período anterior`;
+  if (variation !== null && variation < -5) return `El neto ARS cayó ${Math.abs(variation).toFixed(1)}% frente al período anterior`;
+  return `El período generó un neto de ${formatMoney(net, 'ARS')}`;
+}
+
 function renderHistory() {
-  state.historyResults = filterMovements(state.historySource, historyFilters())
+  const filters = historyFilters();
+  state.historyResults = filterMovements(state.historySource, filters)
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
-  $('#historyResultTitle').textContent = `Resultados (${state.historyResults.length})`;
+  const comparableFilters = { ...filters, from: '', to: '' };
+  const previousResults = filterMovements(state.historyPrevious, comparableFilters);
+  const analysis = analyzeHistory(state.historyResults, previousResults);
+  const scopeLabel = clinicLabel(filters.clinica);
+
+  $('#historyNarrativeTitle').textContent = historyConclusion(analysis);
+  $('#historyNarrativeSubtitle').textContent = `${historyPeriodLabel(filters.from, filters.to)} · ${scopeLabel} · ARS y USD se analizan por separado.`;
+  $('#historyInsightChips').innerHTML = `
+    <span>${analysis.totals.cantidad} movimientos analizados</span>
+    <span>Principal: ${escapeHtml(analysis.topConcept?.concept || 'Sin datos')}</span>
+    <span>Egresos: ${analysis.expenseWeight.toFixed(1)}% de los ingresos ARS</span>`;
+
+  renderHistoryKpis(analysis);
+  const monthlyRows = analysis.byMonth.map((row, index, all) => ({
+    label: monthLabel(row.month), value: row.ARS.neto, highlight: index === all.length - 1,
+  }));
+  $('#historyTrendTitle').textContent = analysis.bestMonth
+    ? `${monthLabel(analysis.bestMonth.month)} fue el mes de mayor neto ARS`
+    : 'El neto ARS a través del tiempo';
+  $('#historyNetTrend').innerHTML = verticalBarChart(monthlyRows);
+
+  const conceptCurrency = analysis.byConcept.some((row) => row.ARS.ingresos) ? 'ARS' : 'USD';
+  $('#historyConceptComposition').innerHTML = horizontalBarChart(
+    analysis.byConcept.map((row) => ({ label: row.concept, value: row[conceptCurrency].ingresos })),
+    conceptCurrency,
+  );
+
+  const clinicCurrency = analysis.byClinic.some((row) => row.ARS.ingresos) ? 'ARS' : 'USD';
+  const clinicRows = analysis.byClinic
+    .filter((row) => filters.clinica === 'AMBAS' || row.clinic === filters.clinica)
+    .sort((a, b) => b[clinicCurrency].ingresos - a[clinicCurrency].ingresos)
+    .map((row) => ({ label: clinicLabel(row.clinic), value: row[clinicCurrency].ingresos }));
+  $('#historyClinicTitle').textContent = filters.clinica === 'AMBAS'
+    ? 'Qué sede aporta más ingresos'
+    : `Facturación de ${scopeLabel}`;
+  $('#historyClinicComparison').innerHTML = horizontalBarChart(clinicRows, clinicCurrency);
+
+  const selectedConcept = $('#historyTrendConcept').value || analysis.topConcept?.concept || 'Consulta';
+  const conceptAnalysis = analyzeHistory(state.historyResults.filter((item) => item.concepto === selectedConcept));
+  $('#historyConceptTrend').innerHTML = lineChart(conceptAnalysis.byMonth.map((row) => ({
+    label: monthLabel(row.month), value: row.ARS.neto,
+  })));
+
+  const leadingClinic = analysis.leadingClinic;
+  const insights = [
+    `<strong>${escapeHtml(analysis.topConcept?.concept || 'Sin actividad')}</strong> es el concepto con mayor facturación del período.`,
+    analysis.bestMonth ? `<strong>${monthLabel(analysis.bestMonth.month)}</strong> registró el mayor neto ARS: ${formatMoney(analysis.bestMonth.ARS.neto, 'ARS')}.` : 'No hay meses con actividad para comparar.',
+    leadingClinic ? `<strong>${clinicLabel(leadingClinic.clinic)}</strong> concentra ${analysis.leadingClinicShare.toFixed(1)}% de los ingresos ARS entre sedes.` : 'No hay ingresos ARS para calcular participación por sede.',
+    `Los egresos representan <strong>${analysis.expenseWeight.toFixed(1)}%</strong> de los ingresos ARS.`,
+  ];
+  $('#historyInsights').innerHTML = insights.map((text, index) => `<article><span>0${index + 1}</span><p>${text}</p></article>`).join('');
+
+  $('#historyResultTitle').textContent = `Movimientos del período (${state.historyResults.length})`;
   $('#historyTable').innerHTML = movementTable(state.historyResults, { includeDate: true });
   $('#historyCards').innerHTML = movementCards(state.historyResults, { includeDate: true });
 }
@@ -445,7 +631,11 @@ async function loadHistory() {
   }
   setBusy($('#applyHistoryButton'), true, 'Buscando…');
   try {
-    state.historySource = await fetchPeriod(state.profile, filters.from, filters.to, filters.clinica);
+    const previous = previousPeriodBounds(filters.from, filters.to);
+    [state.historySource, state.historyPrevious] = await Promise.all([
+      fetchPeriod(state.profile, filters.from, filters.to, filters.clinica),
+      previous ? fetchPeriod(state.profile, previous.from, previous.to, filters.clinica) : Promise.resolve([]),
+    ]);
     renderHistory();
   } catch (error) {
     toast(friendlyFirebaseError(error));
@@ -801,6 +991,7 @@ function bindEvents() {
   $('#monthScope').addEventListener('change', loadMonth);
   $('#monthDate').addEventListener('change', loadMonth);
   $('#applyHistoryButton').addEventListener('click', loadHistory);
+  $('#historyTrendConcept').addEventListener('change', () => state.historySource.length && renderHistory());
   ['#historyConcept', '#historyCoverage', '#historyPlan', '#historyPayment', '#historyCurrency', '#historyType', '#historySearch', '#historyVoided']
     .forEach((selector) => $(selector).addEventListener('input', () => state.historySource.length && renderHistory()));
   $('#backupButton').addEventListener('click', downloadFullBackup);

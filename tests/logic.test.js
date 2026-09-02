@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   argentinaDate,
+  analyzeHistory,
   buildMovement,
   calculateTotals,
   expectedCash,
   filterMovements,
+  previousPeriodBounds,
   validateMovement,
 } from '../src/logic.js';
 
@@ -97,5 +99,27 @@ describe('historial', () => {
   it('combina filtros sin perder separación por sede', () => {
     const items = [movement(), movement({ clinica: 'GUA', pacienteDetalle: 'Otro paciente' })];
     expect(filterMovements(items, { clinica: 'GUA', search: 'otro' })).toHaveLength(1);
+  });
+
+  it('calcula el período anterior con la misma cantidad de días', () => {
+    expect(previousPeriodBounds('2026-08-01', '2026-08-31')).toEqual({
+      from: '2026-07-01',
+      to: '2026-07-31',
+    });
+  });
+
+  it('resume tendencias, conceptos y sedes sin exponer pacientes', () => {
+    const items = [
+      movement({ fecha: '2026-08-01', concepto: 'Consulta', importe: 1000 }),
+      movement({ fecha: '2026-08-15', clinica: 'GUA', concepto: 'Estudios', importe: 600 }),
+      movement({ fecha: '2026-09-01', concepto: 'Consulta', importe: 200 }),
+      movement({ fecha: '2026-09-01', concepto: 'Otros / Gasto', tipoMovimiento: 'Egreso', importe: 100 }),
+    ];
+    const analysis = analyzeHistory(items, [movement({ fecha: '2026-07-01', importe: 800 })]);
+    expect(analysis.totals.ARS.neto).toBe(1700);
+    expect(analysis.byMonth).toHaveLength(2);
+    expect(analysis.topConcept.concept).toBe('Consulta');
+    expect(analysis.leadingClinic.clinic).toBe('CDU');
+    expect(analysis).not.toHaveProperty('pacienteDetalle');
   });
 });
