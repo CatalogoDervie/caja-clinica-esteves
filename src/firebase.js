@@ -21,7 +21,7 @@ const firebaseConfig = emulatorMode
       appId: '1:123456789:web:demo',
     }
   : {
-      apiKey: 'AIzaSyAAKyb5gg1CsXxJ0LLEzi0Janf1_h2A3Ac',
+      apiKey: 'AIzaSyAAKyb5gg1CsXxJ0lLEzi0Janfi_h2A3Ac',
       authDomain: 'caja-clinicas-online.firebaseapp.com',
       projectId: 'caja-clinicas-online',
       storageBucket: 'caja-clinicas-online.firebasestorage.app',
