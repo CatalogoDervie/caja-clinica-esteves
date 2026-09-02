@@ -163,15 +163,27 @@ export async function importHistoricalMovements(profile, movements, onProgress =
   let imported = 0;
   for (let offset = 0; offset < movements.length; offset += 400) {
     const chunk = movements.slice(offset, offset + 400);
+    const refs = chunk.map((movement) => doc(db, 'movimientos', movement.id));
+    const existingSnapshots = await Promise.all(refs.map((reference) => getDoc(reference)));
     const batch = writeBatch(db);
-    for (const movement of chunk) {
+
+    chunk.forEach((movement, index) => {
       const { id, ...data } = movement;
-      batch.set(doc(db, 'movimientos', id), {
-        ...data,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    }
+      const reference = refs[index];
+      if (existingSnapshots[index].exists()) {
+        batch.set(reference, {
+          ...data,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } else {
+        batch.set(reference, {
+          ...data,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    });
+
     await batch.commit();
     imported += chunk.length;
     onProgress(imported, movements.length);
