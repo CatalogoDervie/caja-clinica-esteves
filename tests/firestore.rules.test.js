@@ -199,7 +199,55 @@ describe('escrituras y validación', () => {
     const cdu = testEnv.authenticatedContext('cdu').firestore();
     await assertFails(setDoc(doc(cdu, 'movimientos/historico'), movement({
       fecha: '2026-01-10', fechaKey: 20260110,
+      source: 'historico-cdu',
       createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    })));
+  });
+
+  it('el médico crea histórico CDU y una reimportación actualiza el mismo ID sin duplicarlo', async () => {
+    const medico = testEnv.authenticatedContext('medico').firestore();
+    const historicalRef = doc(medico, 'movimientos/historico-cdu-0002');
+
+    await assertSucceeds(setDoc(historicalRef, movement({
+      fecha: '2026-01-11',
+      fechaKey: 20260111,
+      source: 'historico-cdu',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })));
+
+    const firstSnapshot = await getDoc(historicalRef);
+    const originalCreatedAt = firstSnapshot.data().createdAt;
+
+    await assertSucceeds(updateDoc(historicalRef, {
+      notas: 'Reimportado',
+      updatedAt: serverTimestamp(),
+    }));
+
+    const repeatedSnapshot = await getDoc(historicalRef);
+    expect(repeatedSnapshot.data().createdAt.isEqual(originalCreatedAt)).toBe(true);
+    expect(repeatedSnapshot.data().notas).toBe('Reimportado');
+
+    const historicalQuery = query(
+      collection(medico, 'movimientos'),
+      where('source', '==', 'historico-cdu'),
+    );
+    const historical = await assertSucceeds(getDocs(historicalQuery));
+    expect(historical.docs.map((item) => item.id).sort()).toEqual([
+      'historico-cdu-0001',
+      'historico-cdu-0002',
+    ]);
+  });
+
+  it('el médico no puede crear histórico fuera de CDU', async () => {
+    const medico = testEnv.authenticatedContext('medico').firestore();
+    await assertFails(setDoc(doc(medico, 'movimientos/historico-gua'), movement({
+      fecha: '2026-01-10',
+      fechaKey: 20260110,
+      clinica: 'GUA',
+      source: 'historico-cdu',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     })));
   });
 

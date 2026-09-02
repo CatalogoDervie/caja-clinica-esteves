@@ -649,8 +649,9 @@ async function importSelectedHistorical() {
       throw new Error('historical-verification-failed');
     }
 
-    $('#migrationStatus').textContent = `${verification.count}/${verification.expected} verificados · ${result.created} nuevos · ${result.updated} existentes actualizados.`;
-    toast('Histórico CDU importado y verificado.');
+    const verificationMessage = `Histórico verificado: ${verification.count}/${verification.expected} movimientos CDU.`;
+    $('#migrationStatus').textContent = `${verificationMessage} ${result.created} nuevos · ${result.updated} existentes actualizados.`;
+    toast(verificationMessage);
   } catch (error) {
     $('#migrationStatus').textContent = friendlyFirebaseError(error);
   } finally {
@@ -674,8 +675,9 @@ async function resetTestData() {
       $('#resetTestStatus').textContent = total ? `Eliminando ${done} de ${total}…` : 'No hay datos manuales para eliminar.';
     });
 
-    $('#resetTestStatus').textContent = `${result.movementsDeleted} movimientos manuales y ${result.closuresDeleted} cierres eliminados.`;
-    toast('Caja de prueba reiniciada.');
+    const successMessage = 'Datos manuales y cierres eliminados correctamente. El histórico CDU fue conservado.';
+    $('#resetTestStatus').textContent = `${successMessage} ${result.movementsDeleted} movimientos manuales y ${result.closuresDeleted} cierres eliminados.`;
+    toast(successMessage);
   } catch (error) {
     $('#resetTestStatus').textContent = friendlyFirebaseError(error);
   } finally {
