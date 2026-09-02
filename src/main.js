@@ -1172,7 +1172,12 @@ async function boot() {
       await signInWithEmailAndPassword(auth, ...credentials);
     }));
   }
-  await configureAuthPersistence();
+  // La persistencia mejora la experiencia, pero nunca debe impedir que la app
+  // llegue a la pantalla de login si el navegador bloquea IndexedDB o la
+  // sesión local quedó dañada.
+  configureAuthPersistence().catch((error) => {
+    console.warn('No se pudo activar la persistencia local de sesión:', error);
+  });
   onAuthStateChanged(auth, (user) => {
     if (!user) {
       state.profile = null;
