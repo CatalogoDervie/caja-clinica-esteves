@@ -23,14 +23,12 @@ service cloud.firestore {
     }
 
     function isDoctor() {
-      return activeProfile()
-        && profile().role == 'medico'
+      return profile().role == 'medico'
         && profile().clinica == 'AMBAS';
     }
 
     function isBranchAdmin() {
-      return activeProfile()
-        && profile().role == 'administrativo'
+      return profile().role == 'administrativo'
         && profile().clinica in ['CDU', 'GUA'];
     }
 
@@ -48,16 +46,13 @@ service cloud.firestore {
       return dateKeyFor(argentinaNow());
     }
 
+    function minAdminReviewDateKey() {
+      return dateKeyFor(argentinaNow() - duration.value(7, 'd'));
+    }
+
     function isAdminReviewDateKey(key) {
-      let now = argentinaNow();
-      return key == dateKeyFor(now)
-        || key == dateKeyFor(now - duration.value(1, 'd'))
-        || key == dateKeyFor(now - duration.value(2, 'd'))
-        || key == dateKeyFor(now - duration.value(3, 'd'))
-        || key == dateKeyFor(now - duration.value(4, 'd'))
-        || key == dateKeyFor(now - duration.value(5, 'd'))
-        || key == dateKeyFor(now - duration.value(6, 'd'))
-        || key == dateKeyFor(now - duration.value(7, 'd'));
+      return key >= minAdminReviewDateKey()
+        && key <= argentinaDateKey();
     }
 
     function dateMatchesKey(data) {
