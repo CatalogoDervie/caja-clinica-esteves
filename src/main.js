@@ -646,6 +646,17 @@ function renderHistory() {
   ];
   $('#historyInsights').innerHTML = insights.map((text, index) => `<article><span>0${index + 1}</span><p>${text}</p></article>`).join('');
 
+  const search = filters.search.trim();
+  $('#historySearchResults').hidden = !search;
+  if (search) {
+    $('#historySearchTitle').textContent = `${state.historyResults.length} movimientos encontrados para “${search}”`;
+    $('#historySearchTable').innerHTML = movementTable(state.historyResults, { includeDate: true });
+    $('#historySearchCards').innerHTML = movementCards(state.historyResults, { includeDate: true });
+  } else {
+    $('#historySearchTable').innerHTML = '';
+    $('#historySearchCards').innerHTML = '';
+  }
+
   $('#historyResultTitle').textContent = `Movimientos del período (${state.historyResults.length})`;
   $('#historyTable').innerHTML = movementTable(state.historyResults, { includeDate: true });
   $('#historyCards').innerHTML = movementCards(state.historyResults, { includeDate: true });

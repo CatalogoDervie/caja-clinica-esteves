@@ -115,6 +115,17 @@ describe('historial', () => {
     expect(filterMovements(items, { clinica: 'GUA', search: 'otro' })).toHaveLength(1);
   });
 
+  it('busca personas y tipos de movimiento en toda la historia', () => {
+    const items = [
+      movement({ pacienteDetalle: 'María González', concepto: 'Cirugía', medioPago: 'Transferencia' }),
+      movement({ pacienteDetalle: 'Pedro López', concepto: 'Lentes' }),
+    ];
+    expect(filterMovements(items, { search: 'gonzalez' })).toHaveLength(1);
+    expect(filterMovements(items, { search: 'cirugia' })).toHaveLength(1);
+    expect(filterMovements(items, { search: 'lente' })).toHaveLength(1);
+    expect(filterMovements(items, { search: 'transferencia' })).toHaveLength(1);
+  });
+
   it('calcula el período anterior con la misma cantidad de días', () => {
     expect(previousPeriodBounds('2026-08-01', '2026-08-31')).toEqual({
       from: '2026-07-01',

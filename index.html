@@ -202,11 +202,18 @@
               <label class="compact-field"><span>Desde</span><input id="historyFrom" type="date" /></label>
               <label class="compact-field"><span>Hasta</span><input id="historyTo" type="date" /></label>
               <label class="compact-field"><span>Sede</span><select id="historyClinic"><option value="AMBAS">Ambas</option><option value="CDU">CDU</option><option value="GUA">Gualeguaychú</option></select></label>
+              <label class="compact-field history-search-field"><span>Buscar personas o movimientos</span><input id="historySearch" type="search" placeholder="Apellido, nombre, Lentes, Cirugía, OCT…" /></label>
               <button id="applyHistoryButton" class="button primary" type="button">Actualizar análisis</button>
             </div>
           </header>
 
           <section id="historyKpis" class="history-kpis" aria-label="Indicadores principales"></section>
+
+          <section id="historySearchResults" class="panel history-search-results" hidden>
+            <div class="panel-heading"><div><p class="eyebrow">Coincidencias</p><h2 id="historySearchTitle">Resultados de búsqueda</h2></div></div>
+            <div id="historySearchTable" class="desktop-data"></div>
+            <div id="historySearchCards" class="mobile-data"></div>
+          </section>
 
           <div class="history-story-grid">
             <section class="panel story-card story-card-wide">
@@ -251,7 +258,6 @@
                 <label class="field"><span>Medio de pago</span><select id="historyPayment"><option value="">Todos</option><option>Efectivo</option><option>Transferencia</option><option>Otro</option></select></label>
                 <label class="field"><span>Moneda</span><select id="historyCurrency"><option value="">Todas</option><option>ARS</option><option>USD</option></select></label>
                 <label class="field"><span>Tipo</span><select id="historyType"><option value="">Todos</option><option>Ingreso</option><option>Egreso</option></select></label>
-                <label class="field wide"><span>Búsqueda libre</span><input id="historySearch" type="search" placeholder="Paciente, detalle, estudio…" /></label>
                 <label class="checkbox-field"><input id="historyVoided" type="checkbox" /><span>Incluir anulados</span></label>
               </div>
               <div class="history-detail-heading"><h2 id="historyResultTitle">Movimientos del período</h2></div>

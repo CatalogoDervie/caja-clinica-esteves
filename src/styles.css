@@ -412,6 +412,7 @@ textarea { resize: vertical; }
 .compact-field { min-width: 150px; }
 .compact-field input,
 .compact-field select { min-height: 42px; background: rgba(255,255,255,0.9); }
+#dayDateHint:empty { display: none; }
 
 /* KPI cards */
 .currency-panels {
@@ -714,6 +715,14 @@ textarea { resize: vertical; }
   gap: 10px;
 }
 .history-primary-filters .button { grid-column: 1 / -1; }
+.history-primary-filters .history-search-field { grid-column: 1 / -1; }
+.history-search-field input {
+  padding-left: 14px;
+  background: #fff;
+  border-color: #9eb3c9;
+}
+.history-search-results { margin-bottom: 18px; overflow: hidden; }
+.history-search-results .panel-heading { background: #f7fafc; }
 .insight-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .insight-chips span {
   padding: 7px 10px;

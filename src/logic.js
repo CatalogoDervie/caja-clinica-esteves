@@ -291,6 +291,9 @@ export function filterMovements(movements, filters = {}) {
         movement.obraSocial,
         movement.concepto,
         movement.estudio,
+        movement.clinica,
+        movement.medioPago,
+        movement.tipoMovimiento,
         movement.notas,
       ].join(' '));
       if (!haystack.includes(search)) return false;

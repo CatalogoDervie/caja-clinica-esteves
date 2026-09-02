@@ -64,6 +64,13 @@ describe('estructura responsive y separación de roles', () => {
     expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.month-day-filter \{ width: 100%; \}/);
   });
 
+  it('ofrece una búsqueda histórica visible con resultados responsive', () => {
+    expect(html).toContain('Buscar personas o movimientos');
+    expect(html).toContain('id="historySearchResults"');
+    expect(html).toContain('id="historySearchTable"');
+    expect(html).toContain('id="historySearchCards"');
+  });
+
   it('permite cargar varias filas de estudios de forma responsive', () => {
     expect(html).toContain('id="movementStudies"');
     expect(html).toContain('id="addStudyButton"');
