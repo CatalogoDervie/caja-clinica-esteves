@@ -272,10 +272,7 @@ export function monthBounds(month) {
 }
 
 export function defaultHistoryBounds() {
-  const to = argentinaDate();
-  const date = new Date(`${to}T12:00:00Z`);
-  date.setUTCMonth(date.getUTCMonth() - 2);
-  return { from: date.toISOString().slice(0, 10), to };
+  return { from: '2000-01-01', to: argentinaDate() };
 }
 
 export function friendlyFirebaseError(error) {

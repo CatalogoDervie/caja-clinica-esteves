@@ -433,6 +433,7 @@ function historyFilters() {
 }
 
 function historyPeriodLabel(from, to) {
+  if (from === '2000-01-01') return `Toda la historia hasta ${formatDate(to)}`;
   return `${formatDate(from)} al ${formatDate(to)}`;
 }
 
@@ -631,7 +632,8 @@ async function loadHistory() {
   }
   setBusy($('#applyHistoryButton'), true, 'Buscando…');
   try {
-    const previous = previousPeriodBounds(filters.from, filters.to);
+    const allHistory = filters.from === '2000-01-01';
+    const previous = allHistory ? null : previousPeriodBounds(filters.from, filters.to);
     [state.historySource, state.historyPrevious] = await Promise.all([
       fetchPeriod(state.profile, filters.from, filters.to, filters.clinica),
       previous ? fetchPeriod(state.profile, previous.from, previous.to, filters.clinica) : Promise.resolve([]),
