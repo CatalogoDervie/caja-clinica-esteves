@@ -715,14 +715,6 @@ textarea { resize: vertical; }
   gap: 10px;
 }
 .history-primary-filters .button { grid-column: 1 / -1; }
-.history-primary-filters .history-search-field { grid-column: 1 / -1; }
-.history-search-field input {
-  padding-left: 14px;
-  background: #fff;
-  border-color: #9eb3c9;
-}
-.history-search-results { margin-bottom: 18px; overflow: hidden; }
-.history-search-results .panel-heading { background: #f7fafc; }
 .insight-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .insight-chips span {
   padding: 7px 10px;
@@ -842,6 +834,7 @@ textarea { resize: vertical; }
 .history-detail-panel summary small { margin-left: 22px; color: var(--muted); font-size: 0.7rem; font-weight: 600; }
 .history-detail-panel[open] summary { border-bottom: 1px solid #e6eaf0; }
 .history-detail-content { padding: 20px; }
+.details-metrics { margin: 0; padding-top: 18px; }
 .history-detail-heading { margin: 24px 0 10px; }
 .history-detail-heading h2 { margin: 0; color: var(--ink-strong); font-size: 1rem; }
 .history-filters {
@@ -1099,6 +1092,7 @@ textarea { resize: vertical; }
   .month-history-heading { align-items: stretch; }
   .month-day-filter { width: 100%; }
   .daily-history-metrics { padding: 12px; }
+  .details-metrics { padding: 12px; }
   .history-hero { padding-bottom: 18px; }
   .history-hero h1 { font-size: 2.15rem; }
   .history-primary-filters { grid-template-columns: 1fr 1fr; }

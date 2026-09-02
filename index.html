@@ -69,6 +69,7 @@
             <button class="nav-button active" type="button" data-view="today">Hoy</button>
             <button class="nav-button doctor-only" type="button" data-view="month">Mes</button>
             <button class="nav-button doctor-only" type="button" data-view="history">Historial</button>
+            <button class="nav-button doctor-only" type="button" data-view="details">Movimientos</button>
             <button class="nav-button doctor-only" type="button" data-view="backup">Respaldo</button>
           </nav>
           <div class="user-actions">
@@ -202,18 +203,12 @@
               <label class="compact-field"><span>Desde</span><input id="historyFrom" type="date" /></label>
               <label class="compact-field"><span>Hasta</span><input id="historyTo" type="date" /></label>
               <label class="compact-field"><span>Sede</span><select id="historyClinic"><option value="AMBAS">Ambas</option><option value="CDU">CDU</option><option value="GUA">Gualeguaychú</option></select></label>
-              <label class="compact-field history-search-field"><span>Buscar personas o movimientos</span><input id="historySearch" type="search" placeholder="Apellido, nombre, Lentes, Cirugía, OCT…" /></label>
+              <label class="compact-field"><span>Moneda del análisis</span><select id="historyAnalysisCurrency"><option value="ARS">ARS</option><option value="USD">USD</option></select></label>
               <button id="applyHistoryButton" class="button primary" type="button">Actualizar análisis</button>
             </div>
           </header>
 
           <section id="historyKpis" class="history-kpis" aria-label="Indicadores principales"></section>
-
-          <section id="historySearchResults" class="panel history-search-results" hidden>
-            <div class="panel-heading"><div><p class="eyebrow">Coincidencias</p><h2 id="historySearchTitle">Resultados de búsqueda</h2></div></div>
-            <div id="historySearchTable" class="desktop-data"></div>
-            <div id="historySearchCards" class="mobile-data"></div>
-          </section>
 
           <div class="history-story-grid">
             <section class="panel story-card story-card-wide">
@@ -248,23 +243,37 @@
             <div id="historyInsights" class="narrative-insights"></div>
           </section>
 
-          <details class="panel history-detail-panel">
-            <summary><span>Detalle de movimientos</span><small>Vista secundaria para revisar o exportar información operativa</small></summary>
+        </section>
+
+        <section id="detailsSection" class="view-section doctor-only" data-section="details">
+          <div class="page-heading">
+            <div>
+              <p class="eyebrow">Consulta operativa</p>
+              <h1>Movimientos</h1>
+              <p class="muted">Detalle completo por período, sede y moneda.</p>
+            </div>
+          </div>
+          <section class="panel details-panel">
             <div class="history-detail-content">
               <div class="history-filters">
-                <label class="field"><span>Concepto</span><select id="historyConcept"><option value="">Todos</option><option>Consulta</option><option>Estudios</option><option>Cirugía</option><option>Lentes</option><option>Otros / Gasto</option></select></label>
-                <label class="field"><span>Cobertura</span><select id="historyCoverage"><option value="">Todas</option><option>Particular</option><option>Obra Social</option><option>Sin especificar</option></select></label>
-                <label class="field"><span>Obra social</span><input id="historyPlan" list="healthPlanSuggestions" /></label>
-                <label class="field"><span>Medio de pago</span><select id="historyPayment"><option value="">Todos</option><option>Efectivo</option><option>Transferencia</option><option>Otro</option></select></label>
-                <label class="field"><span>Moneda</span><select id="historyCurrency"><option value="">Todas</option><option>ARS</option><option>USD</option></select></label>
-                <label class="field"><span>Tipo</span><select id="historyType"><option value="">Todos</option><option>Ingreso</option><option>Egreso</option></select></label>
-                <label class="checkbox-field"><input id="historyVoided" type="checkbox" /><span>Incluir anulados</span></label>
+                <label class="field"><span>Desde</span><input id="detailsFrom" type="date" /></label>
+                <label class="field"><span>Hasta</span><input id="detailsTo" type="date" /></label>
+                <label class="field"><span>Sede</span><select id="detailsClinic"><option value="AMBAS">Ambas</option><option value="CDU">CDU</option><option value="GUA">Gualeguaychú</option></select></label>
+                <label class="field"><span>Concepto</span><select id="detailsConcept"><option value="">Todos</option><option>Consulta</option><option>Estudios</option><option>Cirugía</option><option>Lentes</option><option>Otros / Gasto</option></select></label>
+                <label class="field"><span>Cobertura</span><select id="detailsCoverage"><option value="">Todas</option><option>Particular</option><option>Obra Social</option><option>Sin especificar</option></select></label>
+                <label class="field"><span>Obra social</span><input id="detailsPlan" list="healthPlanSuggestions" /></label>
+                <label class="field"><span>Medio de pago</span><select id="detailsPayment"><option value="">Todos</option><option>Efectivo</option><option>Transferencia</option><option>Otro</option></select></label>
+                <label class="field"><span>Moneda</span><select id="detailsCurrency"><option value="">Todas</option><option>ARS</option><option>USD</option></select></label>
+                <label class="field"><span>Tipo</span><select id="detailsType"><option value="">Todos</option><option>Ingreso</option><option>Egreso</option></select></label>
+                <label class="checkbox-field"><input id="detailsVoided" type="checkbox" /><span>Incluir eliminados</span></label>
+                <button id="applyDetailsButton" class="button primary" type="button">Ver movimientos</button>
               </div>
-              <div class="history-detail-heading"><h2 id="historyResultTitle">Movimientos del período</h2></div>
-              <div id="historyTable" class="desktop-data"></div>
-              <div id="historyCards" class="mobile-data"></div>
+              <div id="detailsMetrics" class="currency-panels details-metrics"></div>
+              <div class="history-detail-heading"><h2 id="detailsResultTitle">Movimientos del período</h2></div>
+              <div id="detailsTable" class="desktop-data"></div>
+              <div id="detailsCards" class="mobile-data"></div>
             </div>
-          </details>
+          </section>
         </section>
 
         <section id="backupSection" class="view-section doctor-only" data-section="backup">
@@ -309,6 +318,7 @@
         <button class="active" type="button" data-view="today"><span>Hoy</span></button>
         <button class="doctor-only" type="button" data-view="month"><span>Mes</span></button>
         <button class="doctor-only" type="button" data-view="history"><span>Historial</span></button>
+        <button class="doctor-only" type="button" data-view="details"><span>Detalle</span></button>
         <button class="doctor-only" type="button" data-view="backup"><span>Respaldo</span></button>
       </nav>
     </div>

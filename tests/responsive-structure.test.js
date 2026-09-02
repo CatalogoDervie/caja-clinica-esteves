@@ -41,7 +41,8 @@ describe('estructura responsive y separación de roles', () => {
     expect(html).toContain('id="historyConceptComposition"');
     expect(html).toContain('id="historyClinicComparison"');
     expect(html).toContain('id="historyConceptTrend"');
-    expect(html).toMatch(/<details class="panel history-detail-panel">[\s\S]*id="historyTable"/);
+    expect(html).toContain('id="detailsSection"');
+    expect(html).toContain('data-view="details"');
     expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.history-story-grid \{ grid-template-columns: 1fr; \}/);
   });
 
@@ -64,11 +65,10 @@ describe('estructura responsive y separación de roles', () => {
     expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.month-day-filter \{ width: 100%; \}/);
   });
 
-  it('ofrece una búsqueda histórica visible con resultados responsive', () => {
-    expect(html).toContain('Buscar personas o movimientos');
-    expect(html).toContain('id="historySearchResults"');
-    expect(html).toContain('id="historySearchTable"');
-    expect(html).toContain('id="historySearchCards"');
+  it('permite seleccionar ARS o USD para analizar Historial', () => {
+    expect(html).toContain('id="historyAnalysisCurrency"');
+    expect(html).toContain('<option value="USD">USD</option>');
+    expect(html).not.toContain('Buscar personas o movimientos');
   });
 
   it('permite cargar varias filas de estudios de forma responsive', () => {

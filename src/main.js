@@ -24,7 +24,6 @@ import {
 import {
   closeCash,
   defaultHistoryBounds,
-  deleteMovement,
   deleteManualTestData,
   fetchAllForBackup,
   fetchPeriod,
@@ -38,6 +37,7 @@ import {
   subscribeClosure,
   subscribeDay,
   verifyHistoricalMovements,
+  voidMovement,
 } from './data-service.js';
 import {
   auth,
@@ -63,6 +63,8 @@ const state = {
   historySource: [],
   historyPrevious: [],
   historyResults: [],
+  detailsSource: [],
+  detailsResults: [],
   selectedHistorical: null,
   unsubDay: null,
   unsubClosure: null,
@@ -131,6 +133,7 @@ function switchView(view) {
   $$('[data-view]').forEach((button) => button.classList.toggle('active', button.dataset.view === view));
   if (view === 'month') loadMonth();
   if (view === 'history' && !state.historySource.length) loadHistory();
+  if (view === 'details' && !state.detailsSource.length) loadDetails();
 }
 
 function currencyPanel(currency, totals) {
@@ -207,7 +210,7 @@ function movementCards(movements, { actions = false, includeDate = false } = {})
 
 function visibleDayMovements() {
   const search = $('#daySearch').value;
-  return filterMovements(state.dayMovements, { search, includeVoided: true })
+  return filterMovements(state.dayMovements, { search })
     .sort((a, b) => String(b.createdAt?.seconds || '').localeCompare(String(a.createdAt?.seconds || '')));
 }
 
@@ -216,8 +219,7 @@ function canManageMovement(movement) {
   if (state.closure && state.dayScope !== 'AMBAS') return false;
   if (state.profile.role === 'medico') return true;
   return movement.fecha === argentinaDate()
-    && movement.clinica === state.profile.clinica
-    && movement.createdBy === auth.currentUser?.uid;
+    && movement.clinica === state.profile.clinica;
 }
 
 function renderToday() {
@@ -459,14 +461,21 @@ function historyFilters() {
     from: $('#historyFrom').value,
     to: $('#historyTo').value,
     clinica: $('#historyClinic').value,
-    concepto: $('#historyConcept').value,
-    coberturaTipo: $('#historyCoverage').value,
-    obraSocial: $('#historyPlan').value,
-    medioPago: $('#historyPayment').value,
-    moneda: $('#historyCurrency').value,
-    tipoMovimiento: $('#historyType').value,
-    search: $('#historySearch').value,
-    includeVoided: $('#historyVoided').checked,
+  };
+}
+
+function detailsFilters() {
+  return {
+    from: $('#detailsFrom').value,
+    to: $('#detailsTo').value,
+    clinica: $('#detailsClinic').value,
+    concepto: $('#detailsConcept').value,
+    coberturaTipo: $('#detailsCoverage').value,
+    obraSocial: $('#detailsPlan').value,
+    medioPago: $('#detailsPayment').value,
+    moneda: $('#detailsCurrency').value,
+    tipoMovimiento: $('#detailsType').value,
+    includeVoided: $('#detailsVoided').checked,
   };
 }
 
@@ -593,12 +602,25 @@ function lineChart(rows, currency = 'ARS') {
 }
 
 function historyConclusion(analysis) {
-  const net = analysis.totals.ARS.neto;
-  const variation = analysis.variations.arsNet;
-  if (net < 0) return `El período cerró con un neto negativo de ${formatMoney(Math.abs(net), 'ARS')}`;
-  if (variation !== null && variation > 5) return `El neto ARS creció ${variation.toFixed(1)}% frente al período anterior`;
-  if (variation !== null && variation < -5) return `El neto ARS cayó ${Math.abs(variation).toFixed(1)}% frente al período anterior`;
-  return `El período generó un neto de ${formatMoney(net, 'ARS')}`;
+  const currency = $('#historyAnalysisCurrency').value || 'ARS';
+  const net = analysis.totals[currency].neto;
+  const variation = analysis.variations[currency === 'USD' ? 'usdNet' : 'arsNet'];
+  if (net < 0) return `El período cerró con un neto negativo de ${formatMoney(Math.abs(net), currency)}`;
+  if (variation !== null && variation > 5) return `El neto ${currency} creció ${variation.toFixed(1)}% frente al período anterior`;
+  if (variation !== null && variation < -5) return `El neto ${currency} cayó ${Math.abs(variation).toFixed(1)}% frente al período anterior`;
+  return `El período generó un neto de ${formatMoney(net, currency)}`;
+}
+
+function bestMonthForCurrency(analysis, currency) {
+  return analysis.byMonth.reduce((best, item) => (
+    !best || item[currency].neto > best[currency].neto ? item : best
+  ), null);
+}
+
+function leadingClinicForCurrency(analysis, currency) {
+  return analysis.byClinic.reduce((best, item) => (
+    !best || item[currency].ingresos > best[currency].ingresos ? item : best
+  ), null);
 }
 
 function renderHistory() {
@@ -609,30 +631,38 @@ function renderHistory() {
   const previousResults = filterMovements(state.historyPrevious, comparableFilters);
   const analysis = analyzeHistory(state.historyResults, previousResults);
   const scopeLabel = clinicLabel(filters.clinica);
+  const analysisCurrency = $('#historyAnalysisCurrency').value || 'ARS';
+  const bestMonth = bestMonthForCurrency(analysis, analysisCurrency);
+  const leadingClinic = leadingClinicForCurrency(analysis, analysisCurrency);
+  const topConcept = analysis.byConcept.find((item) => item[analysisCurrency].ingresos > 0) || analysis.byConcept[0];
+  const totalClinicIncome = analysis.byClinic.reduce((sum, item) => sum + item[analysisCurrency].ingresos, 0);
+  const leadingClinicShare = leadingClinic && totalClinicIncome > 0
+    ? (leadingClinic[analysisCurrency].ingresos / totalClinicIncome) * 100
+    : 0;
 
   $('#historyNarrativeTitle').textContent = historyConclusion(analysis);
-  $('#historyNarrativeSubtitle').textContent = `${historyPeriodLabel(filters.from, filters.to)} · ${scopeLabel} · ARS y USD se analizan por separado.`;
+  $('#historyNarrativeSubtitle').textContent = `${historyPeriodLabel(filters.from, filters.to)} · ${scopeLabel} · análisis destacado en ${analysisCurrency}.`;
   $('#historyInsightChips').innerHTML = `
     <span>${analysis.totals.cantidad} movimientos analizados</span>
-    <span>Principal: ${escapeHtml(analysis.topConcept?.concept || 'Sin datos')}</span>
-    <span>Egresos: ${analysis.expenseWeight.toFixed(1)}% de los ingresos ARS</span>`;
+    <span>Principal: ${escapeHtml(topConcept?.concept || 'Sin datos')}</span>
+    <span>Egresos: ${analysis.totals[analysisCurrency].ingresos > 0 ? ((analysis.totals[analysisCurrency].egresos / analysis.totals[analysisCurrency].ingresos) * 100).toFixed(1) : '0.0'}% de los ingresos ${analysisCurrency}</span>`;
 
   renderHistoryKpis(analysis);
   const monthlyRows = analysis.byMonth.map((row, index, all) => ({
-    label: monthLabel(row.month), value: row.ARS.neto, highlight: index === all.length - 1,
+    label: monthLabel(row.month), value: row[analysisCurrency].neto, highlight: index === all.length - 1,
   }));
-  $('#historyTrendTitle').textContent = analysis.bestMonth
-    ? `${monthLabel(analysis.bestMonth.month)} fue el mes de mayor neto ARS`
-    : 'El neto ARS a través del tiempo';
+  $('#historyTrendTitle').textContent = bestMonth
+    ? `${monthLabel(bestMonth.month)} fue el mes de mayor neto ${analysisCurrency}`
+    : `El neto ${analysisCurrency} a través del tiempo`;
   $('#historyNetTrend').innerHTML = verticalBarChart(monthlyRows);
 
-  const conceptCurrency = analysis.byConcept.some((row) => row.ARS.ingresos) ? 'ARS' : 'USD';
+  const conceptCurrency = analysisCurrency;
   $('#historyConceptComposition').innerHTML = horizontalBarChart(
     analysis.byConcept.map((row) => ({ label: row.concept, value: row[conceptCurrency].ingresos })),
     conceptCurrency,
   );
 
-  const clinicCurrency = analysis.byClinic.some((row) => row.ARS.ingresos) ? 'ARS' : 'USD';
+  const clinicCurrency = analysisCurrency;
   const clinicRows = analysis.byClinic
     .filter((row) => filters.clinica === 'AMBAS' || row.clinic === filters.clinica)
     .sort((a, b) => b[clinicCurrency].ingresos - a[clinicCurrency].ingresos)
@@ -642,35 +672,19 @@ function renderHistory() {
     : `Facturación de ${scopeLabel}`;
   $('#historyClinicComparison').innerHTML = horizontalBarChart(clinicRows, clinicCurrency);
 
-  const selectedConcept = $('#historyTrendConcept').value || analysis.topConcept?.concept || 'Consulta';
+  const selectedConcept = $('#historyTrendConcept').value || topConcept?.concept || 'Consulta';
   const conceptAnalysis = analyzeHistory(state.historyResults.filter((item) => item.concepto === selectedConcept));
   $('#historyConceptTrend').innerHTML = lineChart(conceptAnalysis.byMonth.map((row) => ({
-    label: monthLabel(row.month), value: row.ARS.neto,
+    label: monthLabel(row.month), value: row[analysisCurrency].neto,
   })));
 
-  const leadingClinic = analysis.leadingClinic;
   const insights = [
-    `<strong>${escapeHtml(analysis.topConcept?.concept || 'Sin actividad')}</strong> es el concepto con mayor facturación del período.`,
-    analysis.bestMonth ? `<strong>${monthLabel(analysis.bestMonth.month)}</strong> registró el mayor neto ARS: ${formatMoney(analysis.bestMonth.ARS.neto, 'ARS')}.` : 'No hay meses con actividad para comparar.',
-    leadingClinic ? `<strong>${clinicLabel(leadingClinic.clinic)}</strong> concentra ${analysis.leadingClinicShare.toFixed(1)}% de los ingresos ARS entre sedes.` : 'No hay ingresos ARS para calcular participación por sede.',
-    `Los egresos representan <strong>${analysis.expenseWeight.toFixed(1)}%</strong> de los ingresos ARS.`,
+    `<strong>${escapeHtml(topConcept?.concept || 'Sin actividad')}</strong> es el concepto con mayor facturación del período.`,
+    bestMonth ? `<strong>${monthLabel(bestMonth.month)}</strong> registró el mayor neto ${analysisCurrency}: ${formatMoney(bestMonth[analysisCurrency].neto, analysisCurrency)}.` : 'No hay meses con actividad para comparar.',
+    leadingClinic ? `<strong>${clinicLabel(leadingClinic.clinic)}</strong> concentra ${leadingClinicShare.toFixed(1)}% de los ingresos ${analysisCurrency} entre sedes.` : `No hay ingresos ${analysisCurrency} para calcular participación por sede.`,
+    `Los egresos representan <strong>${analysis.totals[analysisCurrency].ingresos > 0 ? ((analysis.totals[analysisCurrency].egresos / analysis.totals[analysisCurrency].ingresos) * 100).toFixed(1) : '0.0'}%</strong> de los ingresos ${analysisCurrency}.`,
   ];
   $('#historyInsights').innerHTML = insights.map((text, index) => `<article><span>0${index + 1}</span><p>${text}</p></article>`).join('');
-
-  const search = filters.search.trim();
-  $('#historySearchResults').hidden = !search;
-  if (search) {
-    $('#historySearchTitle').textContent = `${state.historyResults.length} movimientos encontrados para “${search}”`;
-    $('#historySearchTable').innerHTML = movementTable(state.historyResults, { includeDate: true });
-    $('#historySearchCards').innerHTML = movementCards(state.historyResults, { includeDate: true });
-  } else {
-    $('#historySearchTable').innerHTML = '';
-    $('#historySearchCards').innerHTML = '';
-  }
-
-  $('#historyResultTitle').textContent = `Movimientos del período (${state.historyResults.length})`;
-  $('#historyTable').innerHTML = movementTable(state.historyResults, { includeDate: true });
-  $('#historyCards').innerHTML = movementCards(state.historyResults, { includeDate: true });
 }
 
 async function loadHistory() {
@@ -692,6 +706,33 @@ async function loadHistory() {
     toast(friendlyFirebaseError(error));
   } finally {
     setBusy($('#applyHistoryButton'), false);
+  }
+}
+
+function renderDetails() {
+  const filters = detailsFilters();
+  state.detailsResults = filterMovements(state.detailsSource, filters)
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  renderMetricPanels($('#detailsMetrics'), state.detailsResults);
+  $('#detailsResultTitle').textContent = `Movimientos encontrados (${state.detailsResults.length})`;
+  $('#detailsTable').innerHTML = movementTable(state.detailsResults, { includeDate: true });
+  $('#detailsCards').innerHTML = movementCards(state.detailsResults, { includeDate: true });
+}
+
+async function loadDetails() {
+  const filters = detailsFilters();
+  if (!filters.from || !filters.to || filters.from > filters.to) {
+    toast('Revisá el rango de fechas.');
+    return;
+  }
+  setBusy($('#applyDetailsButton'), true, 'Buscando…');
+  try {
+    state.detailsSource = await fetchPeriod(state.profile, filters.from, filters.to, filters.clinica);
+    renderDetails();
+  } catch (error) {
+    toast(friendlyFirebaseError(error));
+  } finally {
+    setBusy($('#applyDetailsButton'), false);
   }
 }
 
@@ -798,8 +839,6 @@ function movementsFromForm() {
     tipoMovimiento: $('#movementType').value,
     notas: $('#movementNotes').value,
     source: 'manual',
-    createdBy: state.dayMovements.find((item) => item.id === $('#movementId').value)?.createdBy
-      || auth.currentUser?.uid,
   };
   const studies = $$('.study-row', $('#movementStudies')).map((row) => ({
     estudio: row.querySelector('.study-name').value,
@@ -858,7 +897,7 @@ async function handleMovementAction(event) {
     const accepted = await confirmAction('Eliminar movimiento', `¿Seguro que querés eliminar definitivamente ${formatMoney(movement.importe, movement.moneda)}?`);
     if (!accepted) return;
     try {
-      await deleteMovement(movement.id);
+      await voidMovement(movement.id);
       toast('Movimiento eliminado.');
     } catch (error) {
       toast(friendlyFirebaseError(error));
@@ -1012,6 +1051,10 @@ function applyProfile() {
   $('#historyFrom').value = historyBounds.from;
   $('#historyTo').value = historyBounds.to;
   $('#historyClinic').value = 'AMBAS';
+  $('#historyAnalysisCurrency').value = 'ARS';
+  $('#detailsFrom').value = historyBounds.from;
+  $('#detailsTo').value = historyBounds.to;
+  $('#detailsClinic').value = 'AMBAS';
 
   populateCatalogs();
   switchView('today');
@@ -1102,8 +1145,8 @@ function bindEvents() {
   $('#monthDayFilter').addEventListener('change', renderMonthDayHistory);
   $('#applyHistoryButton').addEventListener('click', loadHistory);
   $('#historyTrendConcept').addEventListener('change', () => state.historySource.length && renderHistory());
-  ['#historyConcept', '#historyCoverage', '#historyPlan', '#historyPayment', '#historyCurrency', '#historyType', '#historySearch', '#historyVoided']
-    .forEach((selector) => $(selector).addEventListener('input', () => state.historySource.length && renderHistory()));
+  $('#historyAnalysisCurrency').addEventListener('change', () => state.historySource.length && renderHistory());
+  $('#applyDetailsButton').addEventListener('click', loadDetails);
   $('#backupButton').addEventListener('click', downloadFullBackup);
   $('#historicalFile').addEventListener('change', selectHistoricalFile);
   $('#importHistoricalButton').addEventListener('click', importSelectedHistorical);
