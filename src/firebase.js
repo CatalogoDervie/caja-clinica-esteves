@@ -21,12 +21,12 @@ const firebaseConfig = emulatorMode
       appId: '1:123456789:web:demo',
     }
   : {
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID,
+      apiKey: 'AIzaSyAAKyb5gg1CsXxJ0LLEzi0Janf1_h2A3Ac',
+      authDomain: 'caja-clinicas-online.firebaseapp.com',
+      projectId: 'caja-clinicas-online',
+      storageBucket: 'caja-clinicas-online.firebasestorage.app',
+      messagingSenderId: '269288374717',
+      appId: '1:269288374717:web:beece06a943efb555152d4',
     };
 
 const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];

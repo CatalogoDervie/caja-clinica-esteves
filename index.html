@@ -102,9 +102,10 @@
                   <option value="GUA">Gualeguaychú</option>
                 </select>
               </label>
-              <label class="compact-field doctor-only">
+              <label class="compact-field">
                 <span>Fecha</span>
                 <input id="dayDate" type="date" />
+                <small id="dayDateHint"></small>
               </label>
               <button id="newMovementButton" class="button primary" type="button">+ Nuevo movimiento</button>
             </div>
@@ -229,7 +230,7 @@
               <p id="backupStatus" class="muted" role="status"></p>
             </section>
             <section class="panel action-panel migration-panel">
-              <div class="action-icon neutral" aria-hidden="true">488</div>
+              <div class="action-icon neutral" aria-hidden="true">HIST</div>
               <h2>Migración histórica CDU</h2>
               <p>Herramienta inicial idempotente. El archivo con pacientes no forma parte de la publicación.</p>
               <label class="button secondary file-button">
@@ -238,6 +239,13 @@
               </label>
               <button id="importHistoricalButton" class="button" type="button" disabled>Importar a Firestore</button>
               <p id="migrationStatus" class="muted" role="status">Sin archivo seleccionado.</p>
+            </section>
+            <section class="panel action-panel reset-panel">
+              <div class="action-icon neutral" aria-hidden="true">0</div>
+              <h2>Reiniciar datos de prueba</h2>
+              <p>Elimina movimientos manuales y cierres de ambas sedes. El histórico CDU queda protegido.</p>
+              <button id="resetTestDataButton" class="button danger" type="button">Reiniciar caja de prueba</button>
+              <p id="resetTestStatus" class="muted" role="status">No afecta usuarios, configuración ni histórico CDU.</p>
             </section>
           </div>
         </section>

@@ -4,8 +4,8 @@ Sistema de caja online para Concepción del Uruguay (CDU) y Gualeguaychú (GUA).
 
 ## Qué incluye
 
-- Cuenta administrativa CDU: carga y consulta únicamente la caja del día de CDU.
-- Cuenta administrativa GUA: carga y consulta únicamente la caja del día de GUA.
+- Cuenta administrativa CDU: opera la caja de hoy de CDU y puede revisar, en modo solo lectura, cada uno de los 7 días anteriores.
+- Cuenta administrativa GUA: opera la caja de hoy de GUA y puede revisar, en modo solo lectura, cada uno de los 7 días anteriores.
 - Médico / Supervisor: ve ambas sedes, resumen diario y mensual, historial, cierres y respaldo Excel.
 - ARS por defecto y selector manual USD.
 - Consulta, Estudios, Cirugía, Lentes y Otros / Gasto.
@@ -13,7 +13,7 @@ Sistema de caja online para Concepción del Uruguay (CDU) y Gualeguaychú (GUA).
 - Coseguro Sí/No obligatorio para Cirugía + Obra Social.
 - Cierre de efectivo por sede.
 - Sincronización en tiempo real y documentos independientes para trabajar desde varias computadoras.
-- Anulación lógica; no se borran movimientos.
+- Anulación lógica para la operatoria normal. El Médico dispone de un reinicio controlado que elimina solo movimientos manuales y cierres de prueba; el histórico CDU queda protegido.
 - Exportación `.xlsx` con las hojas MOVIMIENTOS, CIERRES, RESUMEN_DIARIO, RESUMEN_MENSUAL e INFO.
 - Reglas de Firestore y una suite de pruebas para impedir accesos entre sedes.
 
@@ -34,12 +34,12 @@ No se usan Cloud Functions, servidores pagos ni facturación. El proyecto está 
 
 ## Configuración Firebase
 
-1. Crear o elegir el proyecto Firebase exclusivo de Caja.
-2. Registrar una aplicación Web.
-3. Activar Authentication con proveedor Email/Password.
-4. Crear Cloud Firestore en modo producción.
-5. Para desarrollo local, copiar `.env.example` a `.env.local` y completar la configuración pública de la app Web.
-6. Publicar `firestore.rules` y `firestore.indexes.json`:
+El proyecto productivo definitivo es **`caja-clinicas-online`**. La configuración Web pública está fijada en `src/firebase.js`; no se necesitan secretos de GitHub Actions para compilar GitHub Pages.
+
+1. Usar el proyecto Firebase `caja-clinicas-online`.
+2. Mantener Authentication con proveedor Email/Password.
+3. Usar Cloud Firestore en modo producción.
+4. Publicar `firestore.rules` y `firestore.indexes.json`:
 
 ```bash
 npx firebase-tools use --add
@@ -90,7 +90,7 @@ Si el documento no existe, la aplicación usa esos valores predeterminados. Solo
 
 ## Histórico CDU
 
-El HTML recuperado contiene 488 movimientos de CDU. Los datos personales quedan fuera del repositorio y de GitHub Pages.
+El histórico preparado actual contiene 506 movimientos de CDU. Los datos personales quedan fuera del repositorio y de GitHub Pages.
 
 Preparar el archivo privado:
 
@@ -98,7 +98,7 @@ Preparar el archivo privado:
 npm run prepare:historical -- ../reconstructed/Caja_Clinicas_CDU_Gualeguaychu_v2.html
 ```
 
-Esto crea `private-data/historico-cdu.preparado.json`, una ruta excluida por `.gitignore`. Desde Respaldo, el Médico selecciona ese archivo y ejecuta la importación. Los IDs `historico-cdu-0001` a `historico-cdu-0488` son determinísticos: repetir la importación actualiza los mismos documentos y no duplica movimientos.
+Esto crea `private-data/historico-cdu.preparado.json`, una ruta excluida por `.gitignore`. Desde Respaldo, el Médico selecciona ese archivo y ejecuta la importación. Los IDs `historico-cdu-0001` a `historico-cdu-0506` son determinísticos. La importación consulta primero cada ID: si ya existe, conserva `createdAt` y actualiza el mismo documento; si no existe, lo crea. Al finalizar se verifica que Firestore contenga exactamente los IDs seleccionados, sin duplicados.
 
 ## Desarrollo y pruebas
 
@@ -125,21 +125,24 @@ El botón Respaldo solo aparece para el Médico. Descarga `Caja_Clinicas_Respald
 
 ## Publicación
 
-El flujo `.github/workflows/deploy-pages.yml` prueba y compila cada cambio en `main`, y luego publica `dist` en GitHub Pages. Antes de la primera publicación:
+El flujo `.github/workflows/deploy-pages.yml` ejecuta pruebas de lógica, pruebas de reglas de Firestore, compila cada cambio en `main` y publica `dist` en GitHub Pages.
 
-1. Crear en GitHub → Settings → Secrets and variables → Actions los seis secretos indicados en `.env.example`, con los valores de la app Web del Firebase exclusivo de Caja.
-2. Elegir GitHub Actions como origen de Pages en Settings → Pages.
-3. Agregar el dominio `catalogodervie.github.io` en Firebase Authentication → Settings → Authorized domains.
+No se requieren secretos de Firebase en GitHub Actions: la configuración Web del proyecto es pública y no concede permisos por sí sola. La seguridad real permanece en Authentication y `firestore.rules`.
 
-La compilación no incorpora `.env.local` ni archivos con datos históricos.
+Requisitos:
+1. Elegir GitHub Actions como origen de Pages en Settings → Pages.
+2. Mantener `catalogodervie.github.io` dentro de Firebase Authentication → Settings → Authorized domains.
+
+La compilación nunca incorpora archivos con datos históricos.
 
 ## Seguridad operativa
 
-- Las administrativas solo leen la fecha operativa argentina de su propia sede.
+- Las administrativas leen exclusivamente su propia sede y solo un día por vez.
+- Pueden consultar hoy y los 7 días anteriores; únicamente hoy admite altas, ediciones, anulaciones y cierre.
 - Las consultas incluyen los filtros que exigen las reglas; Firestore Rules no se usa como filtro visual.
-- Clínica, fecha, fuente e identificador del cierre no se pueden alterar luego de guardar.
+- Clínica, fecha y fuente no se pueden alterar luego de guardar.
 - Un cierre usa la clave operativa argentina (`CDU_YYYYMMDD` o `GUA_YYYYMMDD`) y bloquea correcciones hasta que el Médico lo reabre.
-- Ningún rol puede borrar movimientos físicamente.
-- Solo el Médico puede reabrir un cierre.
+- Solo el Médico puede reabrir cierres y ejecutar el reinicio de pruebas.
+- El reinicio físico elimina solo movimientos con `source: manual` y cierres; nunca elimina `source: historico-cdu`.
 - Los datos históricos no se incluyen en el código ni en la publicación.
 - La fecha operativa usa `America/Argentina/Cordoba` para evitar el salto de día por UTC.

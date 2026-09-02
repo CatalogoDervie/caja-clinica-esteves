@@ -30,7 +30,7 @@ describe('migración histórica', () => {
 
   it('acepta el archivo ya preparado sin convertirlo por segunda vez', () => {
     const prepared = convertHistoricalMovement({
-      id: 'historico-cdu-0488',
+      id: 'historico-cdu-0506',
       fecha: '2026-08-21',
       clinica: 'CDU',
       pacienteDetalle: 'Paciente de prueba',
@@ -49,7 +49,7 @@ describe('migración histórica', () => {
     });
     const report = validateHistoricalMovements([prepared]);
     expect(report.validCount).toBe(1);
-    expect(report.movements[0].id).toBe('historico-cdu-0488');
+    expect(report.movements[0].id).toBe('historico-cdu-0506');
   });
 
   it('verifica el histórico recuperado cuando está disponible localmente', () => {
@@ -57,8 +57,8 @@ describe('migración histórica', () => {
     const privateFile = path.join(projectRoot, 'private-data', 'historico-cdu.preparado.json');
     if (!fs.existsSync(privateFile)) return;
     const data = JSON.parse(fs.readFileSync(privateFile, 'utf8'));
-    expect(data.movements).toHaveLength(488);
-    expect(new Set(data.movements.map((item) => item.id)).size).toBe(488);
+    expect(data.movements).toHaveLength(506);
+    expect(new Set(data.movements.map((item) => item.id)).size).toBe(506);
     expect(data.movements.every((item) => item.clinica === 'CDU')).toBe(true);
   });
 });

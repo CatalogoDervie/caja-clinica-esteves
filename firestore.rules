@@ -23,12 +23,14 @@ service cloud.firestore {
     }
 
     function isDoctor() {
-      return profile().role == 'medico'
+      return activeProfile()
+        && profile().role == 'medico'
         && profile().clinica == 'AMBAS';
     }
 
     function isBranchAdmin() {
-      return profile().role == 'administrativo'
+      return activeProfile()
+        && profile().role == 'administrativo'
         && profile().clinica in ['CDU', 'GUA'];
     }
 
@@ -36,26 +38,32 @@ service cloud.firestore {
       return request.time - duration.value(3, 'h');
     }
 
+    function dateKeyFor(value) {
+      return value.year() * 10000
+        + value.month() * 100
+        + value.day();
+    }
+
     function argentinaDateKey() {
-      return argentinaNow().year() * 10000
-        + argentinaNow().month() * 100
-        + argentinaNow().day();
+      return dateKeyFor(argentinaNow());
     }
 
-    function isOwnBranch(clinica) {
-      return isDoctor()
-        || (isBranchAdmin() && profile().clinica == clinica);
-    }
-
-    function canReadOperatingDay(data) {
-      return isDoctor()
-        || (isBranchAdmin()
-          && profile().clinica == data.clinica
-          && data.fechaKey == argentinaDateKey());
+    function isAdminReviewDateKey(key) {
+      let now = argentinaNow();
+      return key == dateKeyFor(now)
+        || key == dateKeyFor(now - duration.value(1, 'd'))
+        || key == dateKeyFor(now - duration.value(2, 'd'))
+        || key == dateKeyFor(now - duration.value(3, 'd'))
+        || key == dateKeyFor(now - duration.value(4, 'd'))
+        || key == dateKeyFor(now - duration.value(5, 'd'))
+        || key == dateKeyFor(now - duration.value(6, 'd'))
+        || key == dateKeyFor(now - duration.value(7, 'd'));
     }
 
     function dateMatchesKey(data) {
-      return data.fecha.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+      return data.fecha is string
+        && data.fecha.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.fechaKey is int
         && int(data.fecha[0:4]) * 10000
           + int(data.fecha[5:7]) * 100
           + int(data.fecha[8:10]) == data.fechaKey
@@ -63,6 +71,23 @@ service cloud.firestore {
         && int(data.fecha[5:7]) <= 12
         && int(data.fecha[8:10]) >= 1
         && int(data.fecha[8:10]) <= 31;
+    }
+
+    function isOwnBranch(clinica) {
+      return isDoctor()
+        || (isBranchAdmin() && profile().clinica == clinica);
+    }
+
+    function adminCanReadOperatingDay(data) {
+      return isBranchAdmin()
+        && data.clinica == profile().clinica
+        && isAdminReviewDateKey(data.fechaKey);
+    }
+
+    function adminCanWriteToday(data) {
+      return isBranchAdmin()
+        && data.clinica == profile().clinica
+        && data.fechaKey == argentinaDateKey();
     }
 
     function validMovement(data) {
@@ -73,8 +98,6 @@ service cloud.firestore {
           'tipoMovimiento', 'notas', 'anulado', 'source',
           'createdAt', 'updatedAt'
         ])
-        && data.fecha is string
-        && data.fechaKey is int
         && dateMatchesKey(data)
         && data.clinica in ['CDU', 'GUA']
         && data.pacienteDetalle is string
@@ -107,10 +130,8 @@ service cloud.firestore {
         && (data.coberturaTipo == 'Obra Social'
           ? data.obraSocial.size() > 0
           : data.obraSocial.size() == 0)
-        && (data.concepto == 'Estudios'
-          || data.estudio == null)
-        && (data.concepto == 'Cirugía'
-          || data.tieneCoseguro == null)
+        && (data.concepto == 'Estudios' || data.estudio == null)
+        && (data.concepto == 'Cirugía' || data.tieneCoseguro == null)
         && (data.tipoMovimiento != 'Egreso'
           || (data.concepto == 'Otros / Gasto'
             && data.coberturaTipo == 'Particular'
@@ -123,41 +144,6 @@ service cloud.firestore {
       return !exists(/databases/$(database)/documents/cierres/$(data.clinica + '_' + string(data.fechaKey)));
     }
 
-    match /users/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
-      allow write: if false;
-    }
-
-    match /movimientos/{movementId} {
-      allow get, list: if activeProfile() && canReadOperatingDay(resource.data);
-
-      allow create: if activeProfile()
-        && isOwnBranch(request.resource.data.clinica)
-        && (isDoctor() || request.resource.data.fechaKey == argentinaDateKey())
-        && (isDoctor() || request.resource.data.source == 'manual')
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.updatedAt == request.time
-        && validMovement(request.resource.data)
-        && (isOpenMovement(request.resource.data)
-          || (isDoctor() && request.resource.data.source == 'historico-cdu'));
-
-      allow update: if activeProfile()
-        && isOwnBranch(resource.data.clinica)
-        && resource.data.clinica == request.resource.data.clinica
-        && resource.data.fecha == request.resource.data.fecha
-        && resource.data.fechaKey == request.resource.data.fechaKey
-        && resource.data.createdAt == request.resource.data.createdAt
-        && resource.data.source == request.resource.data.source
-        && (!resource.data.anulado || request.resource.data.anulado)
-        && (isDoctor() || resource.data.fechaKey == argentinaDateKey())
-        && request.resource.data.updatedAt == request.time
-        && validMovement(request.resource.data)
-        && (isOpenMovement(resource.data)
-          || (isDoctor() && resource.data.source == 'historico-cdu'));
-
-      allow delete: if false;
-    }
-
     function validClosure(data) {
       return data.keys().hasOnly([
           'fecha', 'fechaKey', 'clinica', 'saldoInicialARS',
@@ -166,8 +152,6 @@ service cloud.firestore {
           'efectivoRealUSD', 'diferenciaARS', 'diferenciaUSD',
           'cerradoAt'
         ])
-        && data.fecha is string
-        && data.fechaKey is int
         && dateMatchesKey(data)
         && data.clinica in ['CDU', 'GUA']
         && data.saldoInicialARS is number
@@ -185,17 +169,62 @@ service cloud.firestore {
         && data.efectivoRealUSD >= 0;
     }
 
+    function adminCanGetClosure(closureId) {
+      return isBranchAdmin()
+        && closureId.matches('^(CDU|GUA)_[0-9]{8}$')
+        && closureId[0:3] == profile().clinica
+        && isAdminReviewDateKey(int(closureId[4:12]));
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /movimientos/{movementId} {
+      allow get, list: if activeProfile()
+        && (isDoctor() || adminCanReadOperatingDay(resource.data));
+
+      allow create: if activeProfile()
+        && isOwnBranch(request.resource.data.clinica)
+        && (isDoctor() || adminCanWriteToday(request.resource.data))
+        && (isDoctor() || request.resource.data.source == 'manual')
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && validMovement(request.resource.data)
+        && (isOpenMovement(request.resource.data)
+          || (isDoctor() && request.resource.data.source == 'historico-cdu'));
+
+      allow update: if activeProfile()
+        && isOwnBranch(resource.data.clinica)
+        && resource.data.clinica == request.resource.data.clinica
+        && resource.data.fecha == request.resource.data.fecha
+        && resource.data.fechaKey == request.resource.data.fechaKey
+        && resource.data.createdAt == request.resource.data.createdAt
+        && resource.data.source == request.resource.data.source
+        && (!resource.data.anulado || request.resource.data.anulado)
+        && (isDoctor() || adminCanWriteToday(resource.data))
+        && request.resource.data.updatedAt == request.time
+        && validMovement(request.resource.data)
+        && (isOpenMovement(resource.data)
+          || (isDoctor() && resource.data.source == 'historico-cdu'));
+
+      allow delete: if activeProfile()
+        && isDoctor()
+        && resource.data.source == 'manual';
+    }
+
     match /cierres/{closureId} {
       allow get: if activeProfile()
-        && (isDoctor()
-          || (isBranchAdmin()
-            && closureId == profile().clinica + '_' + string(argentinaDateKey())));
-      allow list: if activeProfile() && canReadOperatingDay(resource.data);
+        && (isDoctor() || adminCanGetClosure(closureId));
+
+      allow list: if activeProfile()
+        && (isDoctor() || adminCanReadOperatingDay(resource.data));
 
       allow create: if activeProfile()
         && closureId == request.resource.data.clinica + '_' + string(request.resource.data.fechaKey)
         && isOwnBranch(request.resource.data.clinica)
-        && (isDoctor() || request.resource.data.fechaKey == argentinaDateKey())
+        && (isDoctor() || adminCanWriteToday(request.resource.data))
         && request.resource.data.cerradoAt == request.time
         && validClosure(request.resource.data);
 

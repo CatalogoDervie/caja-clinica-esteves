@@ -160,35 +160,106 @@ export async function fetchAllForBackup(profile) {
 
 export async function importHistoricalMovements(profile, movements, onProgress = () => {}) {
   if (profile.role !== 'medico') throw new Error('permission-denied');
-  let imported = 0;
-  for (let offset = 0; offset < movements.length; offset += 400) {
-    const chunk = movements.slice(offset, offset + 400);
+
+  let processed = 0;
+  let created = 0;
+  let updated = 0;
+
+  // Se usa un lote moderado porque antes de escribir verificamos si cada ID
+  // ya existe. Así una segunda importación conserva createdAt y no choca
+  // con las reglas de seguridad.
+  for (let offset = 0; offset < movements.length; offset += 150) {
+    const chunk = movements.slice(offset, offset + 150);
     const refs = chunk.map((movement) => doc(db, 'movimientos', movement.id));
-    const existingSnapshots = await Promise.all(refs.map((reference) => getDoc(reference)));
+    const snapshots = await Promise.all(refs.map((reference) => getDoc(reference)));
     const batch = writeBatch(db);
 
     chunk.forEach((movement, index) => {
       const { id, ...data } = movement;
       const reference = refs[index];
-      if (existingSnapshots[index].exists()) {
-        batch.set(reference, {
+      const snapshot = snapshots[index];
+
+      if (snapshot.exists()) {
+        const existing = snapshot.data();
+        if (existing.source !== 'historico-cdu') {
+          throw new Error(`historical-id-conflict:${id}`);
+        }
+        batch.update(reference, {
           ...data,
           updatedAt: serverTimestamp(),
-        }, { merge: true });
+        });
+        updated += 1;
       } else {
         batch.set(reference, {
           ...data,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+        created += 1;
       }
     });
 
     await batch.commit();
-    imported += chunk.length;
-    onProgress(imported, movements.length);
+    processed += chunk.length;
+    onProgress(processed, movements.length);
   }
-  return imported;
+
+  return { processed, created, updated };
+}
+
+export async function verifyHistoricalMovements(profile, expectedIds = []) {
+  if (profile.role !== 'medico') throw new Error('permission-denied');
+
+  const snapshot = await getDocs(query(
+    collection(db, 'movimientos'),
+    where('source', '==', 'historico-cdu'),
+  ));
+
+  const ids = new Set(snapshot.docs
+    .filter((item) => item.data().clinica === 'CDU')
+    .map((item) => item.id));
+  const missing = expectedIds.filter((id) => !ids.has(id));
+  const unexpected = [...ids].filter((id) => expectedIds.length && !expectedIds.includes(id));
+
+  return {
+    count: ids.size,
+    expected: expectedIds.length,
+    missing,
+    unexpected,
+    ok: expectedIds.length
+      ? ids.size === expectedIds.length && missing.length === 0 && unexpected.length === 0
+      : true,
+  };
+}
+
+export async function deleteManualTestData(profile, onProgress = () => {}) {
+  if (profile.role !== 'medico') throw new Error('permission-denied');
+
+  const [manualMovements, closures] = await Promise.all([
+    getDocs(query(collection(db, 'movimientos'), where('source', '==', 'manual'))),
+    getDocs(collection(db, 'cierres')),
+  ]);
+
+  const targets = [
+    ...manualMovements.docs.map((item) => ({ kind: 'movement', ref: item.ref })),
+    ...closures.docs.map((item) => ({ kind: 'closure', ref: item.ref })),
+  ];
+
+  let done = 0;
+  for (let offset = 0; offset < targets.length; offset += 400) {
+    const chunk = targets.slice(offset, offset + 400);
+    const batch = writeBatch(db);
+    chunk.forEach((item) => batch.delete(item.ref));
+    await batch.commit();
+    done += chunk.length;
+    onProgress(done, targets.length);
+  }
+
+  return {
+    movementsDeleted: manualMovements.size,
+    closuresDeleted: closures.size,
+    totalDeleted: targets.length,
+  };
 }
 
 export function monthBounds(month) {
@@ -217,6 +288,8 @@ export function friendlyFirebaseError(error) {
   if (code.includes('permission-denied')) return 'No tenés permiso para realizar esta acción.';
   if (code.includes('failed-precondition')) return 'Esta operación requiere una configuración pendiente en Firebase.';
   if (code.includes('profile-not-found')) return 'La cuenta no tiene un perfil habilitado para la Caja.';
+  if (code.includes('historical-id-conflict')) return 'Hay un ID histórico ocupado por un movimiento manual. No se modificó ese registro.';
+  if (code.includes('historical-verification-failed')) return 'La importación terminó, pero la verificación final no coincide con el archivo seleccionado.';
   if (code.includes('unavailable')) return 'El servicio no está disponible en este momento.';
   return 'No se pudo completar la operación. Intentá nuevamente.';
 }

@@ -26,6 +26,12 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 const projectId = 'demo-caja-clinica';
 let testEnv;
 
+function shiftDate(date, days) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
 function movement(overrides = {}) {
   const fecha = overrides.fecha || argentinaDate();
   return {
@@ -80,7 +86,20 @@ async function seedBaseData() {
       setDoc(doc(database, 'users/inactivo'), { role: 'administrativo', clinica: 'CDU', active: false }),
       setDoc(doc(database, 'movimientos/cdu-hoy'), movement()),
       setDoc(doc(database, 'movimientos/gua-hoy'), movement({ clinica: 'GUA' })),
-      setDoc(doc(database, 'movimientos/cdu-viejo'), movement({ fecha: '2026-01-10', fechaKey: 20260110 })),
+      setDoc(doc(database, 'movimientos/cdu-reciente'), movement({
+        fecha: shiftDate(argentinaDate(), -7),
+        fechaKey: dateKey(shiftDate(argentinaDate(), -7)),
+      })),
+      setDoc(doc(database, 'movimientos/cdu-fuera-ventana'), movement({
+        fecha: shiftDate(argentinaDate(), -8),
+        fechaKey: dateKey(shiftDate(argentinaDate(), -8)),
+      })),
+      setDoc(doc(database, 'movimientos/historico-cdu-0001'), movement({
+        fecha: '2026-01-10',
+        fechaKey: 20260110,
+        clinica: 'CDU',
+        source: 'historico-cdu',
+      })),
     ]);
   });
 }
@@ -126,10 +145,25 @@ describe('separación real entre sedes', () => {
     expect(snapshot.size).toBe(1);
   });
 
-  it('CDU no lee GUA ni meses anteriores, incluso por ID directo', async () => {
+  it('CDU puede revisar su propia sede hasta 7 días atrás', async () => {
+    const cdu = testEnv.authenticatedContext('cdu').firestore();
+    await assertSucceeds(getDoc(doc(cdu, 'movimientos/cdu-reciente')));
+
+    const selectedDate = shiftDate(argentinaDate(), -7);
+    const dayQuery = query(
+      collection(cdu, 'movimientos'),
+      where('fechaKey', '==', dateKey(selectedDate)),
+      where('clinica', '==', 'CDU'),
+    );
+    const snapshot = await assertSucceeds(getDocs(dayQuery));
+    expect(snapshot.size).toBe(1);
+  });
+
+  it('CDU no lee GUA ni fechas con más de 7 días, incluso por ID directo', async () => {
     const cdu = testEnv.authenticatedContext('cdu').firestore();
     await assertFails(getDoc(doc(cdu, 'movimientos/gua-hoy')));
-    await assertFails(getDoc(doc(cdu, 'movimientos/cdu-viejo')));
+    await assertFails(getDoc(doc(cdu, 'movimientos/cdu-fuera-ventana')));
+    await assertFails(getDoc(doc(cdu, 'movimientos/historico-cdu-0001')));
   });
 
   it('GUA no lee CDU', async () => {
@@ -140,7 +174,7 @@ describe('separación real entre sedes', () => {
   it('el médico consulta ambas sedes e historial', async () => {
     const medico = testEnv.authenticatedContext('medico').firestore();
     const snapshot = await assertSucceeds(getDocs(collection(medico, 'movimientos')));
-    expect(snapshot.size).toBe(3);
+    expect(snapshot.size).toBe(5);
   });
 });
 
@@ -169,21 +203,13 @@ describe('escrituras y validación', () => {
     })));
   });
 
-  it('CDU no puede disfrazar como histórica una carga del día actual', async () => {
+  it('CDU puede leer pero no modificar un día anterior dentro de la semana', async () => {
     const cdu = testEnv.authenticatedContext('cdu').firestore();
-    await assertFails(setDoc(doc(cdu, 'movimientos/historico-falso'), movement({
-      source: 'historico-cdu',
-      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-    })));
-  });
-
-  it('el médico solo puede importar el histórico preparado en CDU', async () => {
-    const medico = testEnv.authenticatedContext('medico').firestore();
-    await assertFails(setDoc(doc(medico, 'movimientos/historico-gua'), movement({
-      clinica: 'GUA', source: 'historico-cdu',
-      fecha: '2026-01-10', fechaKey: 20260110,
-      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-    })));
+    await assertSucceeds(getDoc(doc(cdu, 'movimientos/cdu-reciente')));
+    await assertFails(updateDoc(doc(cdu, 'movimientos/cdu-reciente'), {
+      notas: 'Intento de corrección pasada',
+      updatedAt: serverTimestamp(),
+    }));
   });
 
   it('rechaza fechas que no coinciden con la clave operativa', async () => {
@@ -206,32 +232,42 @@ describe('escrituras y validación', () => {
     })));
   });
 
-  it('permite anulación lógica y prohíbe el borrado físico', async () => {
+  it('permite anulación lógica; sólo el médico borra movimientos manuales', async () => {
     const cdu = testEnv.authenticatedContext('cdu').firestore();
+    const medico = testEnv.authenticatedContext('medico').firestore();
+
     await assertSucceeds(updateDoc(doc(cdu, 'movimientos/cdu-hoy'), {
       anulado: true,
       updatedAt: serverTimestamp(),
     }));
     await assertFails(deleteDoc(doc(cdu, 'movimientos/cdu-hoy')));
-    const medico = testEnv.authenticatedContext('medico').firestore();
-    await assertFails(deleteDoc(doc(medico, 'movimientos/gua-hoy')));
+    await assertSucceeds(deleteDoc(doc(medico, 'movimientos/gua-hoy')));
+    await assertFails(deleteDoc(doc(medico, 'movimientos/historico-cdu-0001')));
   });
 });
 
 describe('cierres', () => {
-  it('permite consultar el cierre propio de hoy aunque todavía no exista', async () => {
-    const cdu = testEnv.authenticatedContext('cdu').firestore();
-    const id = `CDU_${dateKey(argentinaDate())}`;
-    const snapshot = await assertSucceeds(getDoc(doc(cdu, `cierres/${id}`)));
-    expect(snapshot.exists()).toBe(false);
-  });
-
   it('cada administrativa cierra únicamente su sede y no duplica el cierre', async () => {
     const cdu = testEnv.authenticatedContext('cdu').firestore();
     const id = `CDU_${dateKey(argentinaDate())}`;
     await assertSucceeds(setDoc(doc(cdu, `cierres/${id}`), closure()));
     await assertFails(setDoc(doc(cdu, `cierres/GUA_${dateKey(argentinaDate())}`), closure({ clinica: 'GUA' })));
     await assertFails(updateDoc(doc(cdu, `cierres/${id}`), { efectivoRealARS: 1 }));
+  });
+
+  it('la administrativa puede consultar un cierre de su sede hasta 7 días atrás', async () => {
+    const past = shiftDate(argentinaDate(), -7);
+    const id = `CDU_${dateKey(past)}`;
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `cierres/${id}`), {
+        ...closure({ fecha: past, fechaKey: dateKey(past) }),
+        cerradoAt: Timestamp.now(),
+      });
+    });
+
+    const cdu = testEnv.authenticatedContext('cdu').firestore();
+    await assertSucceeds(getDoc(doc(cdu, `cierres/${id}`)));
   });
 
   it('solo el médico puede reabrir un cierre', async () => {

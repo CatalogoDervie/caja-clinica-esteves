@@ -21,6 +21,7 @@ import {
 import {
   closeCash,
   defaultHistoryBounds,
+  deleteManualTestData,
   fetchAllForBackup,
   fetchPeriod,
   friendlyFirebaseError,
@@ -32,6 +33,7 @@ import {
   saveMovement,
   subscribeClosure,
   subscribeDay,
+  verifyHistoricalMovements,
   voidMovement,
 } from './data-service.js';
 import {
@@ -97,6 +99,25 @@ function clinicLabel(clinic) {
   if (clinic === 'CDU') return 'Concepción del Uruguay';
   if (clinic === 'GUA') return 'Gualeguaychú';
   return 'Ambas sedes';
+}
+
+function offsetIsoDate(date, days) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function adminReviewBounds() {
+  const max = argentinaDate();
+  return { min: offsetIsoDate(max, -7), max };
+}
+
+function isAdminReadOnlyDay() {
+  return state.profile?.role === 'administrativo' && state.dayDate !== argentinaDate();
+}
+
+function canOperateSelectedDay() {
+  return state.profile?.role === 'medico' || !isAdminReadOnlyDay();
 }
 
 function switchView(view) {
@@ -187,11 +208,17 @@ function visibleDayMovements() {
 function renderToday() {
   const visible = visibleDayMovements();
   const active = state.dayMovements.filter((item) => !item.anulado);
+  const readOnly = isAdminReadOnlyDay();
+
   $('#todayTitle').textContent = `Caja ${state.dayScope === 'AMBAS' ? 'de ambas sedes' : clinicLabel(state.dayScope)}`;
-  $('#todaySubtitle').textContent = `${formatDate(state.dayDate)} · ${active.length} movimientos activos`;
+  $('#todaySubtitle').textContent = `${formatDate(state.dayDate)} · ${active.length} movimientos activos${readOnly ? ' · Solo consulta' : ''}`;
   $('#movementCount').textContent = `${visible.length} mostrados`;
+  $('#newMovementButton').hidden = readOnly;
+  $('#newMovementButton').disabled = readOnly;
+
   renderMetricPanels($('#todayMetrics'), active);
-  const canEdit = !state.closure && state.dayScope !== 'AMBAS';
+
+  const canEdit = !state.closure && state.dayScope !== 'AMBAS' && canOperateSelectedDay();
   $('#todayTable').innerHTML = movementTable(visible, { actions: canEdit });
   $('#todayCards').innerHTML = movementCards(visible, { actions: canEdit });
   renderClosure();
@@ -219,6 +246,12 @@ function renderClosure() {
       ${state.profile.role === 'medico' ? '<button id="reopenButton" class="button secondary" type="button">Reabrir caja</button>' : ''}
     </div>`;
     $('#reopenButton')?.addEventListener('click', reopenSelectedCash);
+    return;
+  }
+  if (isAdminReadOnlyDay()) {
+    $('#closureBadge').textContent = 'Consulta';
+    $('#closureBadge').className = 'badge';
+    body.innerHTML = '<div class="closure-content"><p class="muted">No hay cierre registrado para este día. La fecha está disponible solo para revisión.</p></div>';
     return;
   }
   $('#closureBadge').textContent = 'Abierta';
@@ -252,6 +285,10 @@ function renderClosure() {
 }
 
 async function closeSelectedCash() {
+  if (!canOperateSelectedDay()) {
+    toast('Los días anteriores están disponibles solo para consulta.');
+    return;
+  }
   if ($('#actualARS').value === '' || $('#actualUSD').value === '') {
     toast('Completá el efectivo real en ARS y USD.');
     return;
@@ -438,6 +475,7 @@ function resetMovementForm(movement = null) {
   $('#movementClinic').value = movement?.clinica || selectedClinic;
   $('#movementClinic').disabled = state.profile.role === 'administrativo' || Boolean(movement);
   $('#movementDate').value = movement?.fecha || state.dayDate;
+  $('#movementDate').disabled = state.profile.role === 'administrativo' || Boolean(movement);
   $('#movementType').value = movement?.tipoMovimiento || 'Ingreso';
   $('#movementPayment').value = movement?.medioPago || 'Efectivo';
   $('#movementDetail').value = movement?.pacienteDetalle || '';
@@ -457,6 +495,10 @@ function resetMovementForm(movement = null) {
 }
 
 function openMovement(movement = null) {
+  if (!canOperateSelectedDay()) {
+    toast('Los días anteriores están disponibles solo para consulta.');
+    return;
+  }
   if (state.closure && movement?.fecha === state.dayDate && movement?.clinica === state.dayScope) {
     toast('La caja está cerrada. El médico debe reabrirla para corregir.');
     return;
@@ -488,6 +530,11 @@ function movementFromForm() {
 
 async function submitMovement(event) {
   event.preventDefault();
+  if (!canOperateSelectedDay()) {
+    $('#movementError').textContent = 'Los días anteriores están disponibles solo para consulta.';
+    $('#movementError').hidden = false;
+    return;
+  }
   const movement = movementFromForm();
   const validation = validateMovement(movement);
   if (!validation.valid) {
@@ -578,18 +625,59 @@ async function selectHistoricalFile(event) {
 
 async function importSelectedHistorical() {
   if (!state.selectedHistorical?.length) return;
-  const accepted = await confirmAction('Importar histórico CDU', `Se escribirán ${state.selectedHistorical.length} movimientos con identificadores estables. Si ya existen, se actualizarán sin duplicarlos.`);
+  const accepted = await confirmAction(
+    'Importar histórico CDU',
+    `Se procesarán ${state.selectedHistorical.length} movimientos con identificadores estables. Los existentes conservarán su fecha de creación y no se duplicarán.`,
+  );
   if (!accepted) return;
+
   const button = $('#importHistoricalButton');
   setBusy(button, true, 'Importando…');
+
   try {
-    const imported = await importHistoricalMovements(state.profile, state.selectedHistorical, (done, total) => {
+    const result = await importHistoricalMovements(state.profile, state.selectedHistorical, (done, total) => {
       $('#migrationStatus').textContent = `Importando ${done} de ${total}…`;
     });
-    $('#migrationStatus').textContent = `${imported} movimientos importados o actualizados correctamente.`;
-    toast('Histórico CDU importado.');
+
+    $('#migrationStatus').textContent = 'Verificando histórico en Firestore…';
+    const verification = await verifyHistoricalMovements(
+      state.profile,
+      state.selectedHistorical.map((item) => item.id),
+    );
+
+    if (!verification.ok) {
+      throw new Error('historical-verification-failed');
+    }
+
+    $('#migrationStatus').textContent = `${verification.count}/${verification.expected} verificados · ${result.created} nuevos · ${result.updated} existentes actualizados.`;
+    toast('Histórico CDU importado y verificado.');
   } catch (error) {
     $('#migrationStatus').textContent = friendlyFirebaseError(error);
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+async function resetTestData() {
+  const accepted = await confirmAction(
+    'Reiniciar datos de prueba',
+    'Se eliminarán todos los movimientos MANUALES y todos los cierres de ambas sedes. El histórico CDU no se borra. Esta acción no se puede deshacer.',
+  );
+  if (!accepted) return;
+
+  const button = $('#resetTestDataButton');
+  setBusy(button, true, 'Reiniciando…');
+  $('#resetTestStatus').textContent = '';
+
+  try {
+    const result = await deleteManualTestData(state.profile, (done, total) => {
+      $('#resetTestStatus').textContent = total ? `Eliminando ${done} de ${total}…` : 'No hay datos manuales para eliminar.';
+    });
+
+    $('#resetTestStatus').textContent = `${result.movementsDeleted} movimientos manuales y ${result.closuresDeleted} cierres eliminados.`;
+    toast('Caja de prueba reiniciada.');
+  } catch (error) {
+    $('#resetTestStatus').textContent = friendlyFirebaseError(error);
   } finally {
     setBusy(button, false);
   }
@@ -607,16 +695,32 @@ function applyProfile() {
   $('#appView').classList.toggle('admin-mode', admin);
   $('#profileLabel').textContent = state.profile.label;
   $('#headerContext').textContent = admin ? clinicLabel(state.profile.clinica) : 'Control de ambas sedes';
+
   state.dayScope = admin ? state.profile.clinica : 'AMBAS';
   state.dayDate = argentinaDate();
+
   $('#dayScope').value = state.dayScope;
   $('#dayDate').value = state.dayDate;
+
+  if (admin) {
+    const bounds = adminReviewBounds();
+    $('#dayDate').min = bounds.min;
+    $('#dayDate').max = bounds.max;
+    $('#dayDateHint').textContent = 'Hoy y hasta 7 días atrás';
+  } else {
+    $('#dayDate').removeAttribute('min');
+    $('#dayDate').removeAttribute('max');
+    $('#dayDateHint').textContent = '';
+  }
+
   $('#monthScope').value = 'AMBAS';
   $('#monthDate').value = argentinaMonth();
+
   const historyBounds = defaultHistoryBounds();
   $('#historyFrom').value = historyBounds.from;
   $('#historyTo').value = historyBounds.to;
   $('#historyClinic').value = 'AMBAS';
+
   populateCatalogs();
   switchView('today');
   startDaySubscriptions();
@@ -678,7 +782,18 @@ function bindEvents() {
     startDaySubscriptions();
   });
   $('#dayDate').addEventListener('change', () => {
-    state.dayDate = $('#dayDate').value || argentinaDate();
+    const selected = $('#dayDate').value || argentinaDate();
+
+    if (state.profile?.role === 'administrativo') {
+      const bounds = adminReviewBounds();
+      if (selected < bounds.min || selected > bounds.max) {
+        toast('Podés revisar desde hoy hasta 7 días atrás.');
+        $('#dayDate').value = state.dayDate;
+        return;
+      }
+    }
+
+    state.dayDate = selected;
     startDaySubscriptions();
   });
   $('#monthScope').addEventListener('change', loadMonth);
@@ -689,6 +804,7 @@ function bindEvents() {
   $('#backupButton').addEventListener('click', downloadFullBackup);
   $('#historicalFile').addEventListener('change', selectHistoricalFile);
   $('#importHistoricalButton').addEventListener('click', importSelectedHistorical);
+  $('#resetTestDataButton').addEventListener('click', resetTestData);
   window.addEventListener('online', () => { $('#offlineBanner').hidden = true; $('#syncStatus').textContent = 'Actualizando…'; });
   window.addEventListener('offline', () => { $('#offlineBanner').hidden = false; $('#syncStatus').textContent = 'Sin conexión'; });
 }
