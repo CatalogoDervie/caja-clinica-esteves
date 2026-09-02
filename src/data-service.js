@@ -139,6 +139,10 @@ export async function voidMovement(id) {
   });
 }
 
+export async function deleteMovement(id) {
+  await deleteDoc(doc(db, 'movimientos', id));
+}
+
 export async function closeCash(closure) {
   const reference = doc(db, 'cierres', `${closure.clinica}_${closure.fechaKey}`);
   await setDoc(reference, { ...closure, cerradoAt: serverTimestamp() });

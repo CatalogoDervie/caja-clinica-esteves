@@ -77,4 +77,11 @@ describe('estructura responsive y separación de roles', () => {
     expect(html).toContain('id="movementStudiesTotal"');
     expect(css).toMatch(/@media \(max-width: 430px\)[\s\S]*\.study-row \{ grid-template-columns: 1fr 42px; \}/);
   });
+
+  it('presenta acciones para editar y eliminar movimientos permitidos', () => {
+    const main = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
+    expect(main).toContain('data-action="edit"');
+    expect(main).toContain('data-action="delete"');
+    expect(main).toContain('canManageMovement');
+  });
 });

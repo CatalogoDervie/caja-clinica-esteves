@@ -91,7 +91,7 @@ service cloud.firestore {
           'coberturaTipo', 'obraSocial', 'concepto', 'estudio',
           'tieneCoseguro', 'medioPago', 'moneda', 'importe',
           'tipoMovimiento', 'notas', 'anulado', 'source',
-          'createdAt', 'updatedAt'
+          'createdBy', 'createdAt', 'updatedAt'
         ])
         && dateMatchesKey(data)
         && data.clinica in ['CDU', 'GUA']
@@ -114,6 +114,8 @@ service cloud.firestore {
         && data.notas.size() <= 300
         && data.anulado is bool
         && data.source in ['manual', 'historico-cdu']
+        && (data.source == 'historico-cdu'
+          || (data.createdBy is string && data.createdBy.size() > 0))
         && (data.source != 'historico-cdu' || data.clinica == 'CDU')
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
@@ -184,6 +186,8 @@ service cloud.firestore {
         && isOwnBranch(request.resource.data.clinica)
         && (isDoctor() || adminCanWriteToday(request.resource.data))
         && (isDoctor() || request.resource.data.source == 'manual')
+        && (request.resource.data.source == 'historico-cdu'
+          || request.resource.data.createdBy == request.auth.uid)
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time
         && validMovement(request.resource.data)
@@ -198,15 +202,24 @@ service cloud.firestore {
         && resource.data.createdAt == request.resource.data.createdAt
         && resource.data.source == request.resource.data.source
         && (!resource.data.anulado || request.resource.data.anulado)
-        && (isDoctor() || adminCanWriteToday(resource.data))
+        && (isDoctor()
+          || (adminCanWriteToday(resource.data)
+            && resource.data.createdBy == request.auth.uid))
+        && ((!resource.data.keys().hasAny(['createdBy']) && isDoctor())
+          || (resource.data.keys().hasAny(['createdBy'])
+            && request.resource.data.createdBy == resource.data.createdBy))
         && request.resource.data.updatedAt == request.time
         && validMovement(request.resource.data)
         && (isOpenMovement(resource.data)
           || (isDoctor() && resource.data.source == 'historico-cdu'));
 
       allow delete: if activeProfile()
-        && isDoctor()
-        && resource.data.source == 'manual';
+        && resource.data.source == 'manual'
+        && (isDoctor()
+          || (isOwnBranch(resource.data.clinica)
+            && adminCanWriteToday(resource.data)
+            && resource.data.createdBy == request.auth.uid
+            && isOpenMovement(resource.data)));
     }
 
     match /cierres/{closureId} {

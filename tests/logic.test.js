@@ -95,6 +95,15 @@ describe('validaciones del formulario', () => {
     expect(result.importe).toBe(50);
   });
 
+  it('identifica la cuenta que creó cada movimiento manual', () => {
+    const result = buildMovement({
+      fecha: '2026-09-01', clinica: 'CDU', tipoMovimiento: 'Ingreso',
+      concepto: 'Consulta', coberturaTipo: 'Particular', medioPago: 'Efectivo',
+      pacienteDetalle: 'Paciente', importe: 100, createdBy: 'cuenta-cdu',
+    });
+    expect(result.createdBy).toBe('cuenta-cdu');
+  });
+
   it('construye varios estudios con su propio importe sin alterar el formato del movimiento', () => {
     const result = buildStudyMovements(movement({ concepto: 'Estudios' }), [
       { estudio: 'OCT', importe: 120000 },

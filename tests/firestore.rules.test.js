@@ -51,6 +51,7 @@ function movement(overrides = {}) {
     notas: '',
     anulado: false,
     source: 'manual',
+    createdBy: 'cdu',
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
     ...overrides,
@@ -82,10 +83,11 @@ async function seedBaseData() {
     await Promise.all([
       setDoc(doc(database, 'users/cdu'), { role: 'administrativo', clinica: 'CDU', active: true }),
       setDoc(doc(database, 'users/gua'), { role: 'administrativo', clinica: 'GUA', active: true }),
+      setDoc(doc(database, 'users/cdu-otro'), { role: 'administrativo', clinica: 'CDU', active: true }),
       setDoc(doc(database, 'users/medico'), { role: 'medico', clinica: 'AMBAS', active: true }),
       setDoc(doc(database, 'users/inactivo'), { role: 'administrativo', clinica: 'CDU', active: false }),
       setDoc(doc(database, 'movimientos/cdu-hoy'), movement()),
-      setDoc(doc(database, 'movimientos/gua-hoy'), movement({ clinica: 'GUA' })),
+      setDoc(doc(database, 'movimientos/gua-hoy'), movement({ clinica: 'GUA', createdBy: 'gua' })),
       setDoc(doc(database, 'movimientos/cdu-reciente'), movement({
         fecha: shiftDate(argentinaDate(), -7),
         fechaKey: dateKey(shiftDate(argentinaDate(), -7)),
@@ -185,6 +187,15 @@ describe('escrituras y validación', () => {
     await assertSucceeds(setDoc(doc(cdu, 'movimientos/nuevo-cdu'), data));
   });
 
+  it('el médico crea movimientos manuales identificados con su cuenta', async () => {
+    const medico = testEnv.authenticatedContext('medico').firestore();
+    await assertSucceeds(setDoc(doc(medico, 'movimientos/nuevo-medico'), movement({
+      createdBy: 'medico',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })));
+  });
+
   it('CDU no crea en GUA ni modifica la sede de un movimiento', async () => {
     const cdu = testEnv.authenticatedContext('cdu').firestore();
     await assertFails(setDoc(doc(cdu, 'movimientos/intento-gua'), movement({
@@ -280,17 +291,27 @@ describe('escrituras y validación', () => {
     })));
   });
 
-  it('permite anulación lógica; sólo el médico borra movimientos manuales', async () => {
+  it('permite que la misma cuenta edite y elimine su movimiento manual de hoy', async () => {
     const cdu = testEnv.authenticatedContext('cdu').firestore();
     const medico = testEnv.authenticatedContext('medico').firestore();
 
     await assertSucceeds(updateDoc(doc(cdu, 'movimientos/cdu-hoy'), {
-      anulado: true,
+      notas: 'Corrección de la misma cuenta',
       updatedAt: serverTimestamp(),
     }));
-    await assertFails(deleteDoc(doc(cdu, 'movimientos/cdu-hoy')));
+    await assertSucceeds(deleteDoc(doc(cdu, 'movimientos/cdu-hoy')));
     await assertSucceeds(deleteDoc(doc(medico, 'movimientos/gua-hoy')));
     await assertFails(deleteDoc(doc(medico, 'movimientos/historico-cdu-0001')));
+  });
+
+  it('una administrativa no elimina movimientos creados por otra cuenta', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'movimientos/cdu-ajeno'), movement({ createdBy: 'cdu-otro' }));
+    });
+    const cdu = testEnv.authenticatedContext('cdu').firestore();
+    const cduOtro = testEnv.authenticatedContext('cdu-otro').firestore();
+    await assertFails(deleteDoc(doc(cdu, 'movimientos/cdu-ajeno')));
+    await assertSucceeds(deleteDoc(doc(cduOtro, 'movimientos/cdu-ajeno')));
   });
 });
 
@@ -358,7 +379,7 @@ describe('concurrencia', () => {
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       }))),
       assertSucceeds(setDoc(doc(gua, 'movimientos/concurrente-gua-1'), movement({
-        clinica: 'GUA', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        clinica: 'GUA', createdBy: 'gua', createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       }))),
     ]);
     const medico = testEnv.authenticatedContext('medico').firestore();

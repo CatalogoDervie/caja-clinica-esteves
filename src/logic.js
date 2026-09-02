@@ -333,7 +333,7 @@ export function buildMovement(input) {
   const movementType = input.tipoMovimiento === 'Egreso' ? 'Egreso' : 'Ingreso';
   const concept = movementType === 'Egreso' ? 'Otros / Gasto' : input.concepto;
   const coverageType = movementType === 'Egreso' ? 'Particular' : input.coberturaTipo;
-  return {
+  const movement = {
     fecha: String(input.fecha || ''),
     fechaKey: dateKey(input.fecha),
     clinica: input.clinica,
@@ -353,6 +353,10 @@ export function buildMovement(input) {
     anulado: Boolean(input.anulado),
     source: input.source === 'historico-cdu' ? 'historico-cdu' : 'manual',
   };
+  if (movement.source === 'manual' && String(input.createdBy || '').trim()) {
+    movement.createdBy = String(input.createdBy).trim();
+  }
+  return movement;
 }
 
 export function buildStudyMovements(input, studies = []) {

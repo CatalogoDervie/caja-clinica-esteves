@@ -24,6 +24,7 @@ import {
 import {
   closeCash,
   defaultHistoryBounds,
+  deleteMovement,
   deleteManualTestData,
   fetchAllForBackup,
   fetchPeriod,
@@ -37,7 +38,6 @@ import {
   subscribeClosure,
   subscribeDay,
   verifyHistoricalMovements,
-  voidMovement,
 } from './data-service.js';
 import {
   auth,
@@ -170,8 +170,9 @@ function movementTable(movements, { actions = false, includeDate = false } = {})
     const status = movement.anulado ? '<span class="badge danger">Anulado</span>' : '';
     const amountClass = movement.tipoMovimiento === 'Egreso' ? 'negative' : 'positive';
     const amountPrefix = movement.tipoMovimiento === 'Egreso' ? '− ' : '';
-    const actionButtons = actions && !movement.anulado
-      ? `<td><div class="row-actions"><button class="tiny-button" type="button" data-action="edit" data-id="${escapeHtml(movement.id)}">Editar</button><button class="tiny-button danger" type="button" data-action="void" data-id="${escapeHtml(movement.id)}">Anular</button></div></td>`
+    const showActions = typeof actions === 'function' ? actions(movement) : actions;
+    const actionButtons = showActions && !movement.anulado
+      ? `<td><div class="row-actions"><button class="tiny-button" type="button" data-action="edit" data-id="${escapeHtml(movement.id)}">Editar</button><button class="tiny-button danger" type="button" data-action="delete" data-id="${escapeHtml(movement.id)}">Eliminar</button></div></td>`
       : actions ? '<td></td>' : '';
     return `<tr class="${movement.anulado ? 'voided' : ''}">
       ${includeDate ? `<td>${formatDate(movement.fecha)}</td>` : ''}
@@ -192,8 +193,9 @@ function movementCards(movements, { actions = false, includeDate = false } = {})
   if (!movements.length) return '<div class="empty-state">No hay movimientos para mostrar.</div>';
   return movements.map((movement) => {
     const amountPrefix = movement.tipoMovimiento === 'Egreso' ? '− ' : '';
-    const actionButtons = actions && !movement.anulado
-      ? `<div class="row-actions"><button class="tiny-button" type="button" data-action="edit" data-id="${escapeHtml(movement.id)}">Editar</button><button class="tiny-button danger" type="button" data-action="void" data-id="${escapeHtml(movement.id)}">Anular</button></div>`
+    const showActions = typeof actions === 'function' ? actions(movement) : actions;
+    const actionButtons = showActions && !movement.anulado
+      ? `<div class="row-actions"><button class="tiny-button" type="button" data-action="edit" data-id="${escapeHtml(movement.id)}">Editar</button><button class="tiny-button danger" type="button" data-action="delete" data-id="${escapeHtml(movement.id)}">Eliminar</button></div>`
       : '';
     return `<article class="movement-card ${movement.anulado ? 'voided' : ''}">
       <div class="movement-card-head"><div><h3>${escapeHtml(movementTitle(movement))}</h3><span class="subcopy">${includeDate ? `${formatDate(movement.fecha)} · ` : ''}${escapeHtml(movement.concepto)}${movement.estudio ? ` · ${escapeHtml(movement.estudio)}` : ''}</span></div><span class="badge">${escapeHtml(movement.clinica)}</span></div>
@@ -209,6 +211,15 @@ function visibleDayMovements() {
     .sort((a, b) => String(b.createdAt?.seconds || '').localeCompare(String(a.createdAt?.seconds || '')));
 }
 
+function canManageMovement(movement) {
+  if (!movement || movement.anulado || movement.source !== 'manual' || !canOperateSelectedDay()) return false;
+  if (state.closure && state.dayScope !== 'AMBAS') return false;
+  if (state.profile.role === 'medico') return true;
+  return movement.fecha === argentinaDate()
+    && movement.clinica === state.profile.clinica
+    && movement.createdBy === auth.currentUser?.uid;
+}
+
 function renderToday() {
   const visible = visibleDayMovements();
   const active = state.dayMovements.filter((item) => !item.anulado);
@@ -222,9 +233,9 @@ function renderToday() {
 
   renderMetricPanels($('#todayMetrics'), active);
 
-  const canEdit = !state.closure && state.dayScope !== 'AMBAS' && canOperateSelectedDay();
-  $('#todayTable').innerHTML = movementTable(visible, { actions: canEdit });
-  $('#todayCards').innerHTML = movementCards(visible, { actions: canEdit });
+  const showActionColumn = canOperateSelectedDay();
+  $('#todayTable').innerHTML = movementTable(visible, { actions: showActionColumn ? canManageMovement : false });
+  $('#todayCards').innerHTML = movementCards(visible, { actions: showActionColumn ? canManageMovement : false });
   renderClosure();
 }
 
@@ -787,6 +798,8 @@ function movementsFromForm() {
     tipoMovimiento: $('#movementType').value,
     notas: $('#movementNotes').value,
     source: 'manual',
+    createdBy: state.dayMovements.find((item) => item.id === $('#movementId').value)?.createdBy
+      || auth.currentUser?.uid,
   };
   const studies = $$('.study-row', $('#movementStudies')).map((row) => ({
     estudio: row.querySelector('.study-name').value,
@@ -837,12 +850,16 @@ async function handleMovementAction(event) {
   const movement = state.dayMovements.find((item) => item.id === button.dataset.id);
   if (!movement) return;
   if (button.dataset.action === 'edit') openMovement(movement);
-  if (button.dataset.action === 'void') {
-    const accepted = await confirmAction('Anular movimiento', `¿Seguro que querés anular ${formatMoney(movement.importe, movement.moneda)}?`);
+  if (button.dataset.action === 'delete') {
+    if (!canManageMovement(movement)) {
+      toast('Sólo podés eliminar movimientos propios permitidos para esta fecha.');
+      return;
+    }
+    const accepted = await confirmAction('Eliminar movimiento', `¿Seguro que querés eliminar definitivamente ${formatMoney(movement.importe, movement.moneda)}?`);
     if (!accepted) return;
     try {
-      await voidMovement(movement.id);
-      toast('Movimiento anulado.');
+      await deleteMovement(movement.id);
+      toast('Movimiento eliminado.');
     } catch (error) {
       toast(friendlyFirebaseError(error));
     }
