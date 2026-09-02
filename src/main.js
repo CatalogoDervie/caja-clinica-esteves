@@ -9,6 +9,7 @@ import {
   argentinaDate,
   argentinaMonth,
   buildMovement,
+  buildStudyMovements,
   calculateTotals,
   CONCEPTS,
   expectedCash,
@@ -32,7 +33,7 @@ import {
   loadProfile,
   monthBounds,
   reopenCash,
-  saveMovement,
+  saveMovements,
   subscribeClosure,
   subscribeDay,
   verifyHistoricalMovements,
@@ -369,6 +370,40 @@ function summaryList(rows) {
   return `<div class="summary-list">${rows.map((row) => `<div class="summary-item"><div><strong>${escapeHtml(row.label)}</strong><span class="subcopy">${row.count} movimientos</span></div><div class="values"><strong>${formatMoney(row.ars, 'ARS')}</strong><span class="subcopy">${formatMoney(row.usd, 'USD')}</span></div></div>`).join('')}</div>`;
 }
 
+function renderMonthDayHistory() {
+  const selectedDate = $('#monthDayFilter').value;
+  const metrics = $('#monthDayMetrics');
+
+  if (selectedDate) {
+    const movements = state.monthMovements.filter((item) => item.fecha === selectedDate);
+    metrics.hidden = false;
+    renderMetricPanels(metrics, movements);
+    $('#monthDayTitle').textContent = `Movimientos del ${formatDate(selectedDate)} (${movements.length})`;
+    $('#monthDays').innerHTML = movementTable(movements);
+    $('#monthDayCards').innerHTML = movementCards(movements);
+    return;
+  }
+
+  metrics.hidden = true;
+  metrics.innerHTML = '';
+  $('#monthDayTitle').textContent = 'Resumen de todos los días';
+  const daily = summarizeDaily(state.monthMovements).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const tableRows = daily.map((row) => ({
+    id: `${row.fecha}-${row.clinica}`,
+    fecha: row.fecha,
+    clinica: row.clinica,
+    pacienteDetalle: `${row.cantidad} movimientos`,
+    concepto: 'Resumen diario',
+    coberturaTipo: '', obraSocial: '', estudio: '', medioPago: '', moneda: 'ARS',
+    importe: row.ARS.neto,
+    tipoMovimiento: row.ARS.neto < 0 ? 'Egreso' : 'Ingreso',
+    notas: `USD neto ${formatMoney(row.USD.neto, 'USD')}`,
+    anulado: false,
+  }));
+  $('#monthDays').innerHTML = movementTable(tableRows, { includeDate: true });
+  $('#monthDayCards').innerHTML = movementCards(tableRows, { includeDate: true });
+}
+
 function renderMonth() {
   renderMetricPanels($('#monthMetrics'), state.monthMovements);
   const summaries = summarizeByClinic(state.monthMovements);
@@ -385,21 +420,13 @@ function renderMonth() {
     const total = calculateTotals(items);
     return { label: concept, count: total.cantidad, ars: total.ARS.neto, usd: total.USD.neto };
   }));
-  const daily = summarizeDaily(state.monthMovements).sort((a, b) => b.fecha.localeCompare(a.fecha));
-  const tableRows = daily.map((row) => ({
-    id: `${row.fecha}-${row.clinica}`,
-    fecha: row.fecha,
-    clinica: row.clinica,
-    pacienteDetalle: `${row.cantidad} movimientos`,
-    concepto: 'Resumen diario',
-    coberturaTipo: '', obraSocial: '', estudio: '', medioPago: '', moneda: 'ARS',
-    importe: row.ARS.neto,
-    tipoMovimiento: row.ARS.neto < 0 ? 'Egreso' : 'Ingreso',
-    notas: `USD neto ${formatMoney(row.USD.neto, 'USD')}`,
-    anulado: false,
-  }));
-  $('#monthDays').innerHTML = movementTable(tableRows, { includeDate: true });
-  $('#monthDayCards').innerHTML = movementCards(tableRows, { includeDate: true });
+  const currentSelection = $('#monthDayFilter').value;
+  const dates = [...new Set(state.monthMovements.map((item) => item.fecha).filter(Boolean))]
+    .sort((a, b) => b.localeCompare(a));
+  $('#monthDayFilter').innerHTML = '<option value="">Todos los días</option>'
+    + dates.map((date) => `<option value="${date}">${formatDate(date)}</option>`).join('');
+  $('#monthDayFilter').value = dates.includes(currentSelection) ? currentSelection : '';
+  renderMonthDayHistory();
 }
 
 async function loadMonth() {
@@ -653,8 +680,41 @@ function syncMovementForm() {
   $('#movementCoverageField').hidden = isExpense;
   $('#movementHealthPlanField').hidden = isExpense || !isHealthPlan;
   $('#movementConceptField').hidden = isExpense;
-  $('#movementStudyField').hidden = isExpense || concept !== 'Estudios';
+  const isStudies = !isExpense && concept === 'Estudios';
+  $('#movementStudiesField').hidden = !isStudies;
+  $('#movementAmountField').hidden = isStudies;
+  $('#movementAmount').required = !isStudies;
   $('#movementCopayField').hidden = isExpense || concept !== 'Cirugía' || !isHealthPlan;
+}
+
+function studyOptions(selected = '') {
+  return '<option value="">Seleccionar estudio…</option>'
+    + state.catalogs.estudios.map((value) => `<option${value === selected ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('');
+}
+
+function updateStudyRows() {
+  const rows = $$('.study-row', $('#movementStudies'));
+  rows.forEach((row) => {
+    row.querySelector('.remove-study-button').disabled = rows.length === 1;
+  });
+  const total = rows.reduce((sum, row) => sum + (Number(row.querySelector('.study-amount').value) || 0), 0);
+  $('#movementStudiesTotal').textContent = `Total: ${formatMoney(total, $('#movementUsd').checked ? 'USD' : 'ARS')}`;
+}
+
+function addStudyRow(study = {}) {
+  const row = document.createElement('div');
+  row.className = 'study-row';
+  row.innerHTML = `
+    <label class="field"><span>Estudio</span><select class="study-name">${studyOptions(study.estudio || '')}</select></label>
+    <label class="field"><span>Importe</span><input class="study-amount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0" value="${escapeHtml(study.importe ?? '')}" /></label>
+    <button class="icon-button remove-study-button" type="button" aria-label="Quitar estudio" title="Quitar estudio">×</button>`;
+  $('#movementStudies').append(row);
+  updateStudyRows();
+}
+
+function resetStudyRows(movement = null) {
+  $('#movementStudies').innerHTML = '';
+  addStudyRow({ estudio: movement?.estudio || '', importe: movement?.importe ?? '' });
 }
 
 function resetMovementForm(movement = null) {
@@ -674,7 +734,6 @@ function resetMovementForm(movement = null) {
   $('#movementCoverage').value = movement?.coberturaTipo === 'Obra Social' ? 'Obra Social' : 'Particular';
   $('#movementHealthPlan').value = movement?.obraSocial || '';
   $('#movementConcept').value = movement?.concepto || 'Consulta';
-  $('#movementStudy').value = movement?.estudio || '';
   $('#movementAmount').value = movement?.importe ?? '';
   $('#movementUsd').checked = movement?.moneda === 'USD';
   $('#movementNotes').value = movement?.notas || '';
@@ -683,6 +742,7 @@ function resetMovementForm(movement = null) {
       && radio.value === (movement.tieneCoseguro ? 'yes' : 'no');
   });
   $('#movementError').hidden = true;
+  resetStudyRows(movement);
   syncMovementForm();
 }
 
@@ -700,16 +760,15 @@ function openMovement(movement = null) {
   setTimeout(() => $('#movementDetail').focus(), 40);
 }
 
-function movementFromForm() {
+function movementsFromForm() {
   const copay = $('input[name="movementCopay"]:checked');
-  return buildMovement({
+  const input = {
     fecha: $('#movementDate').value,
     clinica: $('#movementClinic').value,
     pacienteDetalle: $('#movementDetail').value,
     coberturaTipo: $('#movementCoverage').value,
     obraSocial: $('#movementHealthPlan').value,
     concepto: $('#movementConcept').value,
-    estudio: $('#movementStudy').value,
     tieneCoseguro: copay ? copay.value === 'yes' : null,
     medioPago: $('#movementPayment').value,
     moneda: $('#movementUsd').checked ? 'USD' : 'ARS',
@@ -717,7 +776,12 @@ function movementFromForm() {
     tipoMovimiento: $('#movementType').value,
     notas: $('#movementNotes').value,
     source: 'manual',
-  });
+  };
+  const studies = $$('.study-row', $('#movementStudies')).map((row) => ({
+    estudio: row.querySelector('.study-name').value,
+    importe: row.querySelector('.study-amount').value,
+  }));
+  return buildStudyMovements(input, studies);
 }
 
 async function submitMovement(event) {
@@ -727,19 +791,27 @@ async function submitMovement(event) {
     $('#movementError').hidden = false;
     return;
   }
-  const movement = movementFromForm();
-  const validation = validateMovement(movement);
-  if (!validation.valid) {
-    $('#movementError').textContent = Object.values(validation.errors)[0];
+  const movements = movementsFromForm();
+  if (!movements.length) {
+    $('#movementError').textContent = 'Agregá al menos un estudio.';
+    $('#movementError').hidden = false;
+    return;
+  }
+  const invalid = movements.map(validateMovement).find((result) => !result.valid);
+  if (invalid) {
+    $('#movementError').textContent = Object.values(invalid.errors)[0];
     $('#movementError').hidden = false;
     return;
   }
   const button = $('#saveMovementButton');
   setBusy(button, true, 'Guardando…');
   try {
-    await saveMovement(movement, $('#movementId').value || null);
+    await saveMovements(movements, $('#movementId').value || null);
     $('#movementDialog').close();
-    toast($('#movementId').value ? 'Movimiento actualizado.' : 'Movimiento registrado.');
+    const created = movements.length;
+    toast($('#movementId').value
+      ? (created > 1 ? `Movimiento actualizado y ${created - 1} estudio adicional registrado.` : 'Movimiento actualizado.')
+      : (created > 1 ? `${created} estudios registrados correctamente.` : 'Movimiento registrado.'));
   } catch (error) {
     $('#movementError').textContent = friendlyFirebaseError(error);
     $('#movementError').hidden = false;
@@ -878,8 +950,6 @@ async function resetTestData() {
 }
 
 function populateCatalogs() {
-  $('#movementStudy').innerHTML = '<option value="">Seleccionar…</option>'
-    + state.catalogs.estudios.map((value) => `<option>${escapeHtml(value)}</option>`).join('');
   $('#movementPayment').innerHTML = state.catalogs.mediosPago.map((value) => `<option>${escapeHtml(value)}</option>`).join('');
   $('#healthPlanSuggestions').innerHTML = state.catalogs.obrasSociales.map((value) => `<option value="${escapeHtml(value)}"></option>`).join('');
 }
@@ -968,6 +1038,15 @@ function bindEvents() {
   $('#cancelMovementButton').addEventListener('click', () => $('#movementDialog').close());
   $('#movementForm').addEventListener('submit', submitMovement);
   ['#movementType', '#movementCoverage', '#movementConcept'].forEach((selector) => $(selector).addEventListener('change', syncMovementForm));
+  $('#addStudyButton').addEventListener('click', () => addStudyRow());
+  $('#movementStudies').addEventListener('input', updateStudyRows);
+  $('#movementStudies').addEventListener('click', (event) => {
+    const button = event.target.closest('.remove-study-button');
+    if (!button || button.disabled) return;
+    button.closest('.study-row').remove();
+    updateStudyRows();
+  });
+  $('#movementUsd').addEventListener('change', updateStudyRows);
   $('#todayTable').addEventListener('click', handleMovementAction);
   $('#todayCards').addEventListener('click', handleMovementAction);
   $('#daySearch').addEventListener('input', renderToday);
@@ -992,6 +1071,7 @@ function bindEvents() {
   });
   $('#monthScope').addEventListener('change', loadMonth);
   $('#monthDate').addEventListener('change', loadMonth);
+  $('#monthDayFilter').addEventListener('change', renderMonthDayHistory);
   $('#applyHistoryButton').addEventListener('click', loadHistory);
   $('#historyTrendConcept').addEventListener('change', () => state.historySource.length && renderHistory());
   ['#historyConcept', '#historyCoverage', '#historyPlan', '#historyPayment', '#historyCurrency', '#historyType', '#historySearch', '#historyVoided']

@@ -352,6 +352,17 @@ export function buildMovement(input) {
   };
 }
 
+export function buildStudyMovements(input, studies = []) {
+  if (input.tipoMovimiento === 'Egreso' || input.concepto !== 'Estudios') {
+    return [buildMovement(input)];
+  }
+  return studies.map((study) => buildMovement({
+    ...input,
+    estudio: study.estudio,
+    importe: study.importe,
+  }));
+}
+
 export function expectedCash(movements, initial = { ARS: 0, USD: 0 }) {
   const totals = calculateTotals((movements || []).filter((item) => item.medioPago === 'Efectivo'));
   return {

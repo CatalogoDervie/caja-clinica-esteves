@@ -3,6 +3,7 @@ import {
   argentinaDate,
   analyzeHistory,
   buildMovement,
+  buildStudyMovements,
   calculateTotals,
   expectedCash,
   filterMovements,
@@ -92,6 +93,19 @@ describe('validaciones del formulario', () => {
     expect(result.moneda).toBe('ARS');
     expect(result.concepto).toBe('Otros / Gasto');
     expect(result.importe).toBe(50);
+  });
+
+  it('construye varios estudios con su propio importe sin alterar el formato del movimiento', () => {
+    const result = buildStudyMovements(movement({ concepto: 'Estudios' }), [
+      { estudio: 'OCT', importe: 120000 },
+      { estudio: 'Campimetría / CV', importe: 80000 },
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result.map((item) => [item.estudio, item.importe])).toEqual([
+      ['OCT', 120000],
+      ['Campimetría / CV', 80000],
+    ]);
+    expect(calculateTotals(result).ARS.ingresos).toBe(200000);
   });
 });
 

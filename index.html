@@ -176,7 +176,15 @@
             </section>
           </div>
           <section class="panel monthly-days-panel">
-            <div class="panel-heading"><h2>Detalle por día</h2></div>
+            <div class="panel-heading month-history-heading">
+              <div>
+                <h2>Histórico diario</h2>
+                <p class="subcopy">Elegí un día para ver sus KPI y movimientos.</p>
+              </div>
+              <label class="compact-field month-day-filter"><span>Día</span><select id="monthDayFilter"><option value="">Todos los días</option></select></label>
+            </div>
+            <div id="monthDayMetrics" class="currency-panels daily-history-metrics" hidden></div>
+            <div class="month-day-result-heading"><h3 id="monthDayTitle">Resumen de todos los días</h3></div>
             <div id="monthDays" class="desktop-data"></div>
             <div id="monthDayCards" class="mobile-data"></div>
           </section>
@@ -319,13 +327,20 @@
             <label id="movementCoverageField" class="field"><span>Cobertura</span><select id="movementCoverage"><option>Particular</option><option>Obra Social</option></select></label>
             <label id="movementHealthPlanField" class="field"><span>Obra social</span><input id="movementHealthPlan" list="healthPlanSuggestions" /></label>
             <label id="movementConceptField" class="field"><span>Concepto</span><select id="movementConcept"><option>Consulta</option><option>Estudios</option><option>Cirugía</option><option>Lentes</option><option>Otros / Gasto</option></select></label>
-            <label id="movementStudyField" class="field"><span>Estudio realizado</span><select id="movementStudy"></select></label>
+            <section id="movementStudiesField" class="field wide studies-field" hidden>
+              <div class="studies-heading">
+                <span>Estudios realizados</span>
+                <span id="movementStudiesTotal" class="studies-total">Total: $ 0</span>
+              </div>
+              <div id="movementStudies" class="study-rows"></div>
+              <button id="addStudyButton" class="button secondary add-study-button" type="button">+ Agregar otro estudio</button>
+            </section>
             <fieldset id="movementCopayField" class="field radio-field">
               <legend>¿Tiene coseguro?</legend>
               <label><input type="radio" name="movementCopay" value="yes" /> Sí</label>
               <label><input type="radio" name="movementCopay" value="no" /> No</label>
             </fieldset>
-            <label class="field"><span>Importe</span><input id="movementAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0" required /></label>
+            <label id="movementAmountField" class="field"><span>Importe</span><input id="movementAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0" required /></label>
             <label class="currency-switch"><input id="movementUsd" type="checkbox" /><span><strong>USD</strong><small>Destildado = pesos argentinos</small></span></label>
             <label class="field wide"><span>Observación</span><textarea id="movementNotes" rows="2" maxlength="300" placeholder="Opcional"></textarea></label>
           </div>

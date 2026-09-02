@@ -103,6 +103,35 @@ export async function saveMovement(movement, id = null) {
   return movementRef.id;
 }
 
+export async function saveMovements(movements, id = null) {
+  if (!Array.isArray(movements) || !movements.length) throw new Error('empty-movements');
+  const batch = writeBatch(db);
+  const ids = [];
+
+  movements.forEach((movement, index) => {
+    if (index === 0 && id) {
+      const { createdAt: _createdAt, id: _id, ...editable } = movement;
+      batch.update(doc(db, 'movimientos', id), {
+        ...editable,
+        updatedAt: serverTimestamp(),
+      });
+      ids.push(id);
+      return;
+    }
+
+    const movementRef = doc(collection(db, 'movimientos'));
+    batch.set(movementRef, {
+      ...movement,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    ids.push(movementRef.id);
+  });
+
+  await batch.commit();
+  return ids;
+}
+
 export async function voidMovement(id) {
   await updateDoc(doc(db, 'movimientos', id), {
     anulado: true,

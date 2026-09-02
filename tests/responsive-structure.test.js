@@ -56,4 +56,18 @@ describe('estructura responsive y separación de roles', () => {
     expect(css).not.toMatch(/\.metric-cell strong \{[\s\S]{0,350}text-overflow: ellipsis;/);
     expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.currency-panels \{ grid-template-columns: 1fr;/);
   });
+
+  it('incluye un histórico diario dentro de la vista mensual', () => {
+    expect(html).toContain('id="monthDayFilter"');
+    expect(html).toContain('id="monthDayMetrics"');
+    expect(html).toContain('id="monthDayTitle"');
+    expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.month-day-filter \{ width: 100%; \}/);
+  });
+
+  it('permite cargar varias filas de estudios de forma responsive', () => {
+    expect(html).toContain('id="movementStudies"');
+    expect(html).toContain('id="addStudyButton"');
+    expect(html).toContain('id="movementStudiesTotal"');
+    expect(css).toMatch(/@media \(max-width: 430px\)[\s\S]*\.study-row \{ grid-template-columns: 1fr 42px; \}/);
+  });
 });
