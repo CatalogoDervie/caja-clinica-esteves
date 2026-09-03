@@ -1,12 +1,12 @@
 name: Publicar Caja en GitHub Pages
 
 on:
-  workflow_run:
-    workflows: ["pages build and deployment"]
-    types: [completed]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -17,7 +17,6 @@ concurrency:
 
 jobs:
   build-and-deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -49,6 +48,23 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+      - name: Esperar publicación automática de Pages
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for intento in {1..60}; do
+            estado=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100" \
+              --jq '.workflow_runs[] | select(.name == "pages build and deployment") | .status' \
+              | head -n 1)
+            if [ "$estado" = "completed" ]; then
+              echo "La publicación automática terminó; se publicará el sitio compilado."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "La publicación automática no terminó dentro del tiempo esperado."
+          exit 1
       - name: Publicar
         id: deployment
         uses: actions/deploy-pages@v4
