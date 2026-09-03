@@ -167,6 +167,13 @@ async function commitMovementsBatch(movements, id = null, includeCreatedBy = fal
 export async function saveMovements(movements, id = null) {
   if (!Array.isArray(movements) || !movements.length) throw new Error('empty-movements');
 
+  // La gran mayoría de las cargas administrativas son un solo movimiento.
+  // En ese caso usamos la misma escritura directa cubierta por las pruebas de
+  // reglas, evitando diferencias innecesarias de evaluación por batch.
+  if (movements.length === 1) {
+    return [await saveMovement(movements[0], id)];
+  }
+
   try {
     return await commitMovementsBatch(movements, id, false);
   } catch (error) {
