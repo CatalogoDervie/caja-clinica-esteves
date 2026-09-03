@@ -20,6 +20,11 @@ function timestampDate(value) {
   return Number.isNaN(date.valueOf()) ? '' : date;
 }
 
+function optionalNumber(value) {
+  if (value === null || value === undefined || value === '') return '';
+  return Number(value) || 0;
+}
+
 function movementRows(movements) {
   return [...(movements || [])]
     .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.clinica.localeCompare(b.clinica))
@@ -41,6 +46,10 @@ function closureRows(closures) {
       Number(item.efectivoEsperadoARS) || 0, Number(item.efectivoEsperadoUSD) || 0,
       Number(item.efectivoRealARS) || 0, Number(item.efectivoRealUSD) || 0,
       Number(item.diferenciaARS) || 0, Number(item.diferenciaUSD) || 0,
+      optionalNumber(item.transferenciasEsperadasARS), optionalNumber(item.transferenciasEsperadasUSD),
+      optionalNumber(item.transferenciasVerificadasARS), optionalNumber(item.transferenciasVerificadasUSD),
+      optionalNumber(item.diferenciaTransferenciasARS), optionalNumber(item.diferenciaTransferenciasUSD),
+      optionalNumber(item.diferenciaTotalARS), optionalNumber(item.diferenciaTotalUSD),
       timestampDate(item.cerradoAt),
     ]);
 }
@@ -94,13 +103,17 @@ export function createBackupWorkbook({ movements = [], closures = [], generatedA
   const closureHeaders = [
     'Fecha', 'Clínica', 'Saldo Inicial ARS', 'Saldo Inicial USD',
     'Efectivo Esperado ARS', 'Efectivo Esperado USD',
-    'Efectivo Real ARS', 'Efectivo Real USD', 'Diferencia ARS',
-    'Diferencia USD', 'Fecha de Cierre',
+    'Efectivo Real ARS', 'Efectivo Real USD',
+    'Diferencia Efectivo ARS', 'Diferencia Efectivo USD',
+    'Transferencias Esperadas ARS', 'Transferencias Esperadas USD',
+    'Transferencias Verificadas ARS', 'Transferencias Verificadas USD',
+    'Diferencia Transferencias ARS', 'Diferencia Transferencias USD',
+    'Diferencia Total ARS', 'Diferencia Total USD', 'Fecha de Cierre',
   ];
   addSheet(
     workbook, 'CIERRES', closureHeaders, closureRows(closures),
-    [12, 10, 18, 18, 22, 22, 18, 18, 18, 18, 22],
-    [3, 4, 5, 6, 7, 8, 9, 10], [1, 11],
+    [12, 10, 18, 18, 22, 22, 18, 18, 22, 22, 25, 25, 26, 26, 27, 27, 20, 20, 22],
+    [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18], [1, 19],
   );
 
   const summaryHeaders = [
@@ -132,7 +145,7 @@ export function createBackupWorkbook({ movements = [], closures = [], generatedA
     ['Cierres', closures.length],
     ['Período desde', sortedDates[0] || 'Sin datos'],
     ['Período hasta', sortedDates.at(-1) || 'Sin datos'],
-    ['Versión', '1.0.0'],
+    ['Versión', '1.1.0'],
   ]);
   info.mergeCells('A1:B1');
   info.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF173F3B' } };
