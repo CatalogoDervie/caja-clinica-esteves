@@ -14,6 +14,8 @@ export const STUDIES = Object.freeze([
   'HRT',
   'YAG',
   'Campimetría / CV',
+  'Recuento Endotelial',
+  'IOL',
 ]);
 export const PAYMENT_METHODS = Object.freeze(['Efectivo', 'Transferencia', 'Otro']);
 export const ARGENTINA_TIME_ZONE = 'America/Argentina/Cordoba';
@@ -89,7 +91,7 @@ export function inferConcept(service, movementType = 'Ingreso') {
   if (movementType === 'Egreso') return 'Otros / Gasto';
   const text = normalizeText(service);
   if (/gasto|envio|cambio/.test(text)) return 'Otros / Gasto';
-  if (/oct|paquim|topograf|hrt|yag|campo visual|campim|cvc|estudio/.test(text)) return 'Estudios';
+  if (/oct|paquim|topograf|hrt|yag|campo visual|campim|cvc|endotel|\biol\b|estudio/.test(text)) return 'Estudios';
   if (/cirug|catarat|faco|facó|vitrect/.test(text)) return 'Cirugía';
   if (/lente|lio|multifocal/.test(text)) return 'Lentes';
   return 'Consulta';
@@ -105,6 +107,8 @@ export function normalizeStudy(service) {
   if (text.includes('hrt')) studies.push('HRT');
   if (text.includes('yag')) studies.push('YAG');
   if (/campo visual|campim|cvc|\bcv\b/.test(text)) studies.push('Campimetría / CV');
+  if (text.includes('endotel')) studies.push('Recuento Endotelial');
+  if (/\biol\b/.test(text)) studies.push('IOL');
   return studies.length ? studies.join(' + ') : String(service ?? '').trim();
 }
 
