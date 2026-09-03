@@ -140,12 +140,22 @@ service cloud.firestore {
     }
 
     function validClosure(data) {
+      let transferKeys = [
+        'transferenciasEsperadasARS', 'transferenciasEsperadasUSD',
+        'transferenciasVerificadasARS', 'transferenciasVerificadasUSD',
+        'diferenciaTransferenciasARS', 'diferenciaTransferenciasUSD',
+        'diferenciaTotalARS', 'diferenciaTotalUSD'
+      ];
+      let hasTransferControl = data.keys().hasAny(transferKeys);
       return data.keys().hasOnly([
           'fecha', 'fechaKey', 'clinica', 'saldoInicialARS',
           'saldoInicialUSD', 'efectivoEsperadoARS',
           'efectivoEsperadoUSD', 'efectivoRealARS',
           'efectivoRealUSD', 'diferenciaARS', 'diferenciaUSD',
-          'cerradoAt'
+          'transferenciasEsperadasARS', 'transferenciasEsperadasUSD',
+          'transferenciasVerificadasARS', 'transferenciasVerificadasUSD',
+          'diferenciaTransferenciasARS', 'diferenciaTransferenciasUSD',
+          'diferenciaTotalARS', 'diferenciaTotalUSD', 'cerradoAt'
         ])
         && dateMatchesKey(data)
         && data.clinica in ['CDU', 'GUA']
@@ -161,7 +171,23 @@ service cloud.firestore {
         && data.saldoInicialARS >= 0
         && data.saldoInicialUSD >= 0
         && data.efectivoRealARS >= 0
-        && data.efectivoRealUSD >= 0;
+        && data.efectivoRealUSD >= 0
+        && (!hasTransferControl
+          || (data.keys().hasAll(transferKeys)
+            && data.transferenciasEsperadasARS is number
+            && data.transferenciasEsperadasUSD is number
+            && data.transferenciasVerificadasARS is number
+            && data.transferenciasVerificadasUSD is number
+            && data.diferenciaTransferenciasARS is number
+            && data.diferenciaTransferenciasUSD is number
+            && data.diferenciaTotalARS is number
+            && data.diferenciaTotalUSD is number
+            && data.diferenciaTransferenciasARS
+              == data.transferenciasVerificadasARS - data.transferenciasEsperadasARS
+            && data.diferenciaTransferenciasUSD
+              == data.transferenciasVerificadasUSD - data.transferenciasEsperadasUSD
+            && data.diferenciaTotalARS == data.diferenciaARS + data.diferenciaTransferenciasARS
+            && data.diferenciaTotalUSD == data.diferenciaUSD + data.diferenciaTransferenciasUSD));
     }
 
     function adminCanGetClosure(closureId) {
