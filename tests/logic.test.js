@@ -8,6 +8,9 @@ import {
   expectedCash,
   filterMovements,
   previousPeriodBounds,
+  STUDIES,
+  inferConcept,
+  normalizeStudy,
   validateMovement,
 } from '../src/logic.js';
 
@@ -62,6 +65,13 @@ describe('totales', () => {
 });
 
 describe('validaciones del formulario', () => {
+  it('reconoce Recuento Endotelial e IOL como estudios disponibles', () => {
+    expect(STUDIES).toEqual(expect.arrayContaining(['Recuento Endotelial', 'IOL']));
+    expect(inferConcept('Recuento endotelial')).toBe('Estudios');
+    expect(inferConcept('IOL')).toBe('Estudios');
+    expect(normalizeStudy('Recuento endotelial + IOL')).toBe('Recuento Endotelial + IOL');
+  });
+
   it('exige estudio para Estudios', () => {
     const result = validateMovement(movement({ concepto: 'Estudios', estudio: '' }));
     expect(result.valid).toBe(false);
