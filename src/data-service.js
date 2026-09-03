@@ -16,7 +16,16 @@ import { db } from './firebase.js';
 import { argentinaDate, dateFromKey, dateKey } from './logic.js';
 
 export const DEFAULT_CATALOGS = Object.freeze({
-  estudios: ['OCT', 'Paquimetría', 'Topografía', 'HRT', 'YAG', 'Campimetría / CV'],
+  estudios: [
+    'OCT',
+    'Paquimetría',
+    'Topografía',
+    'HRT',
+    'YAG',
+    'Campimetría / CV',
+    'Recuento Endotelial',
+    'IOL',
+  ],
   obrasSociales: ['PAMI', 'OSER', 'IOSPER', 'SANCOR SALUD', 'OSPE'],
   mediosPago: ['Efectivo', 'Transferencia', 'Otro'],
 });
@@ -159,7 +168,11 @@ export async function loadCatalogs() {
   if (!snapshot.exists()) return DEFAULT_CATALOGS;
   const data = snapshot.data();
   return {
-    estudios: validCatalog(data.estudios, DEFAULT_CATALOGS.estudios),
+    estudios: [...new Set([
+      ...validCatalog(data.estudios, DEFAULT_CATALOGS.estudios),
+      'Recuento Endotelial',
+      'IOL',
+    ])],
     obrasSociales: validCatalog(data.obrasSociales, DEFAULT_CATALOGS.obrasSociales),
     mediosPago: validCatalog(data.mediosPago, DEFAULT_CATALOGS.mediosPago),
   };
