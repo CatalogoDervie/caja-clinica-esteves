@@ -7,6 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'src', 'styles.css'), 'utf8');
 const dataService = fs.readFileSync(path.join(root, 'src', 'data-service.js'), 'utf8');
+const main = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
 
 describe('estructura responsive y separación de roles', () => {
   it('incluye viewport móvil y navegación específica para celular', () => {
@@ -78,8 +79,19 @@ describe('estructura responsive y separación de roles', () => {
     expect(css).toMatch(/@media \(max-width: 430px\)[\s\S]*\.study-row \{ grid-template-columns: 1fr 42px; \}/);
   });
 
+  it('abre movimientos nuevos con Obra Social, OSER y Consulta predeterminados', () => {
+    expect(main).toContain(": 'Obra Social';");
+    expect(main).toContain("movement ? (movement.obraSocial || '') : 'OSER'");
+    expect(main).toContain("movement?.concepto || 'Consulta'");
+  });
+
+  it('incluye Recuento Endotelial e IOL aunque exista un catálogo remoto anterior', () => {
+    expect(dataService).toContain("'Recuento Endotelial'");
+    expect(dataService).toContain("'IOL'");
+    expect(dataService).toMatch(/validCatalog\(data\.estudios[\s\S]*'Recuento Endotelial'[\s\S]*'IOL'/);
+  });
+
   it('presenta acciones para editar y eliminar movimientos permitidos', () => {
-    const main = fs.readFileSync(path.join(root, 'src', 'main.js'), 'utf8');
     expect(main).toContain('data-action="edit"');
     expect(main).toContain('data-action="delete"');
     expect(main).toContain('canManageMovement');
