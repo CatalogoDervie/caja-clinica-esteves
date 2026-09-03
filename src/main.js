@@ -794,8 +794,10 @@ function resetMovementForm(movement = null) {
   $('#movementType').value = movement?.tipoMovimiento || 'Ingreso';
   $('#movementPayment').value = movement?.medioPago || 'Efectivo';
   $('#movementDetail').value = movement?.pacienteDetalle || '';
-  $('#movementCoverage').value = movement?.coberturaTipo === 'Obra Social' ? 'Obra Social' : 'Particular';
-  $('#movementHealthPlan').value = movement?.obraSocial || '';
+  $('#movementCoverage').value = movement
+    ? (movement.coberturaTipo === 'Obra Social' ? 'Obra Social' : 'Particular')
+    : 'Obra Social';
+  $('#movementHealthPlan').value = movement ? (movement.obraSocial || '') : 'OSER';
   $('#movementConcept').value = movement?.concepto || 'Consulta';
   $('#movementAmount').value = movement?.importe ?? '';
   $('#movementUsd').checked = movement?.moneda === 'USD';
