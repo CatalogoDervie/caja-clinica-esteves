@@ -9,7 +9,7 @@ function replaceBlock(source, startMarker, endMarker, replacement) {
   return `${source.slice(0, start)}${replacement}\n\n${source.slice(end)}`;
 }
 
-const renderClosureWithTransfers = String.raw`function renderClosure() {
+const renderClosureWithTransfers = (function renderClosure() {
   const body = $('#closureBody');
   if (state.dayScope === 'AMBAS') {
     $('#closureBadge').textContent = 'Por sede';
@@ -142,9 +142,9 @@ const renderClosureWithTransfers = String.raw`function renderClosure() {
     .forEach((selector) => $(selector).addEventListener('input', updateDifferencePreview));
   $('#closeCashButton').addEventListener('click', closeSelectedCash);
   updateExpected();
-}`;
+}).toString();
 
-const closeSelectedCashWithTransfers = String.raw`async function closeSelectedCash() {
+const closeSelectedCashWithTransfers = (async function closeSelectedCash() {
   if (!canOperateSelectedDay()) {
     toast('Los días anteriores están disponibles solo para consulta.');
     return;
@@ -198,9 +198,9 @@ const closeSelectedCashWithTransfers = String.raw`async function closeSelectedCa
   } finally {
     setBusy(button, false);
   }
-}`;
+}).toString();
 
-const closeCashCompatibility = String.raw`export async function closeCash(closure) {
+const closeCashCompatibility = `export ${(async function closeCash(closure) {
   const reference = doc(db, 'cierres', `${closure.clinica}_${closure.fechaKey}`);
   try {
     await setDoc(reference, { ...closure, cerradoAt: serverTimestamp() });
@@ -223,7 +223,7 @@ const closeCashCompatibility = String.raw`export async function closeCash(closur
     } = closure;
     await setDoc(reference, { ...legacyClosure, cerradoAt: serverTimestamp() });
   }
-}`;
+}).toString()}`;
 
 function closureTransferPlugin() {
   return {
