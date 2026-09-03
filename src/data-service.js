@@ -12,7 +12,7 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { db } from './firebase.js';
+import { auth, db } from './firebase.js';
 import { argentinaDate, dateFromKey, dateKey } from './logic.js';
 
 export const DEFAULT_CATALOGS = Object.freeze({
@@ -94,6 +94,14 @@ export function subscribeClosure(profile, date, clinic, onData, onError) {
   }, onError);
 }
 
+function isPermissionDenied(error) {
+  return String(error?.code || error?.message || error || '').includes('permission-denied');
+}
+
+function compatibilityCreatedBy() {
+  return auth?.currentUser?.uid || '';
+}
+
 export async function saveMovement(movement, id = null) {
   if (id) {
     const { createdAt: _createdAt, id: _id, ...editable } = movement;
@@ -104,18 +112,30 @@ export async function saveMovement(movement, id = null) {
     return id;
   }
   const movementRef = doc(collection(db, 'movimientos'));
-  await setDoc(movementRef, {
+  const payload = {
     ...movement,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  try {
+    await setDoc(movementRef, payload);
+  } catch (error) {
+    const createdBy = movement.source === 'manual' ? compatibilityCreatedBy() : '';
+    if (!isPermissionDenied(error) || !createdBy) throw error;
+
+    // Compatibilidad con una versión de reglas que exigía createdBy en
+    // movimientos manuales. La escritura normal se intenta primero para no
+    // alterar el esquema actual cuando producción ya tiene las reglas nuevas.
+    await setDoc(movementRef, { ...payload, createdBy });
+  }
   return movementRef.id;
 }
 
-export async function saveMovements(movements, id = null) {
-  if (!Array.isArray(movements) || !movements.length) throw new Error('empty-movements');
+async function commitMovementsBatch(movements, id = null, includeCreatedBy = false) {
   const batch = writeBatch(db);
   const ids = [];
+  const createdBy = includeCreatedBy ? compatibilityCreatedBy() : '';
 
   movements.forEach((movement, index) => {
     if (index === 0 && id) {
@@ -129,16 +149,38 @@ export async function saveMovements(movements, id = null) {
     }
 
     const movementRef = doc(collection(db, 'movimientos'));
-    batch.set(movementRef, {
+    const payload = {
       ...movement,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    };
+    if (createdBy && movement.source === 'manual') payload.createdBy = createdBy;
+
+    batch.set(movementRef, payload);
     ids.push(movementRef.id);
   });
 
   await batch.commit();
   return ids;
+}
+
+export async function saveMovements(movements, id = null) {
+  if (!Array.isArray(movements) || !movements.length) throw new Error('empty-movements');
+
+  try {
+    return await commitMovementsBatch(movements, id, false);
+  } catch (error) {
+    const hasNewManualMovement = movements.some((movement, index) => (
+      !(index === 0 && id) && movement.source === 'manual'
+    ));
+    if (!isPermissionDenied(error) || !hasNewManualMovement || !compatibilityCreatedBy()) {
+      throw error;
+    }
+
+    // Si las reglas publicadas en Firebase quedaron en la versión que exigía
+    // createdBy, reintenta el lote con ese campo solo en documentos nuevos.
+    return commitMovementsBatch(movements, id, true);
+  }
 }
 
 export async function voidMovement(id) {
