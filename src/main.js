@@ -216,8 +216,8 @@ function visibleDayMovements() {
 
 function canManageMovement(movement) {
   if (!movement || movement.anulado || movement.source !== 'manual' || !canOperateSelectedDay()) return false;
-  if (state.closure && state.dayScope !== 'AMBAS') return false;
   if (state.profile.role === 'medico') return true;
+  if (state.closure && state.dayScope !== 'AMBAS') return false;
   return movement.fecha === argentinaDate()
     && movement.clinica === state.profile.clinica;
 }
@@ -816,8 +816,13 @@ function openMovement(movement = null) {
     toast('Los días anteriores están disponibles solo para consulta.');
     return;
   }
-  if (state.closure && movement?.fecha === state.dayDate && movement?.clinica === state.dayScope) {
-    toast('La caja está cerrada. El médico debe reabrirla para corregir.');
+  if (
+    state.profile.role !== 'medico'
+    && state.closure
+    && movement?.fecha === state.dayDate
+    && movement?.clinica === state.dayScope
+  ) {
+    toast('La caja está cerrada.');
     return;
   }
   resetMovementForm(movement);

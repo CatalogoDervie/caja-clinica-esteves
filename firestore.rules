@@ -227,8 +227,7 @@ service cloud.firestore {
         && (isDoctor() || adminCanWriteToday(resource.data))
         && request.resource.data.updatedAt == request.time
         && validMovement(request.resource.data)
-        && (isOpenMovement(resource.data)
-          || (isDoctor() && resource.data.source == 'historico-cdu'));
+        && (isOpenMovement(resource.data) || isDoctor());
 
       allow delete: if activeProfile()
         && isDoctor()
