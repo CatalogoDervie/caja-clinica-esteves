@@ -34,23 +34,17 @@ jobs:
         run: |
           from pathlib import Path
 
-          def replace_exact(path, old, new):
+          def replace_section(path, start_marker, end_marker, replacement):
               file_path = Path(path)
               text = file_path.read_text(encoding='utf-8')
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{path}: se esperaba 1 coincidencia y se encontraron {count}')
-              file_path.write_text(text.replace(old, new), encoding='utf-8')
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              file_path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
 
-          replace_exact(
+          replace_section(
               'src/main.js',
-              """function canManageMovement(movement) {
-            if (!movement || movement.anulado || movement.source !== 'manual' || !canOperateSelectedDay()) return false;
-            if (state.closure && state.dayScope !== 'AMBAS') return false;
-            if (state.profile.role === 'medico') return true;
-            return movement.fecha === argentinaDate()
-              && movement.clinica === state.profile.clinica;
-          }""",
+              'function canManageMovement(movement) {',
+              '\n\nfunction renderToday()',
               """function canManageMovement(movement) {
             if (!movement || movement.anulado || movement.source !== 'manual' || !canOperateSelectedDay()) return false;
             if (state.profile.role === 'medico') return true;
@@ -60,46 +54,52 @@ jobs:
           }""",
           )
 
-          replace_exact(
+          replace_section(
               'src/main.js',
-              """  if (state.closure && movement?.fecha === state.dayDate && movement?.clinica === state.dayScope) {
-            toast('La caja está cerrada. El médico debe reabrirla para corregir.');
-            return;
-          }""",
-              """  if (
-            state.profile.role !== 'medico'
-            && state.closure
-            && movement?.fecha === state.dayDate
-            && movement?.clinica === state.dayScope
-          ) {
-            toast('La caja está cerrada.');
-            return;
+              'function openMovement(movement = null) {',
+              '\n\nfunction movementsFromForm()',
+              """function openMovement(movement = null) {
+            if (!canOperateSelectedDay()) {
+              toast('Los días anteriores están disponibles solo para consulta.');
+              return;
+            }
+            if (
+              state.profile.role !== 'medico'
+              && state.closure
+              && movement?.fecha === state.dayDate
+              && movement?.clinica === state.dayScope
+            ) {
+              toast('La caja está cerrada.');
+              return;
+            }
+            resetMovementForm(movement);
+            $('#movementDialog').showModal();
+            setTimeout(() => $('#movementDetail').focus(), 40);
           }""",
           )
 
-          replace_exact(
+          replace_section(
               'firestore.rules',
-              """        && validMovement(request.resource.data)
-                  && (isOpenMovement(resource.data)
-                    || (isDoctor() && resource.data.source == 'historico-cdu'));""",
-              """        && validMovement(request.resource.data)
-                  && (isOpenMovement(resource.data) || isDoctor());""",
+              '      allow update: if activeProfile()',
+              '\n\n      allow delete:',
+              """      allow update: if activeProfile()
+                && isOwnBranch(resource.data.clinica)
+                && resource.data.clinica == request.resource.data.clinica
+                && resource.data.fecha == request.resource.data.fecha
+                && resource.data.fechaKey == request.resource.data.fechaKey
+                && resource.data.createdAt == request.resource.data.createdAt
+                && resource.data.source == request.resource.data.source
+                && (!resource.data.anulado || request.resource.data.anulado)
+                && (isDoctor() || adminCanWriteToday(resource.data))
+                && request.resource.data.updatedAt == request.time
+                && validMovement(request.resource.data)
+                && (isOpenMovement(resource.data) || isDoctor());""",
           )
 
-          replace_exact(
+          replace_section(
               'tests/firestore.rules.test.js',
-              """  it('obliga al médico a reabrir antes de corregir un movimiento manual', async () => {
-            await testEnv.withSecurityRulesDisabled(async (context) => {
-              await setDoc(doc(context.firestore(), `cierres/CDU_${dateKey(argentinaDate())}`), {
-                ...closure(),
-                cerradoAt: Timestamp.now(),
-              });
-            });
-            const medico = testEnv.authenticatedContext('medico').firestore();
-            await assertFails(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {
-              notas: 'Corrección sin reapertura', updatedAt: serverTimestamp(),
-            }));
-          });""",
+              "  it('obliga al médico a reabrir antes de corregir un movimiento manual', async () => {",
+              "\n  });\n});\n\ndescribe('concurrencia'",
               """  it('permite al médico corregir y anular un movimiento manual con la caja cerrada', async () => {
             await testEnv.withSecurityRulesDisabled(async (context) => {
               await setDoc(doc(context.firestore(), `cierres/CDU_${dateKey(argentinaDate())}`), {
@@ -118,8 +118,7 @@ jobs:
             }));
             await assertSucceeds(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {
               anulado: true, updatedAt: serverTimestamp(),
-            }));
-          });""",
+            }));""",
           )
 
       - name: Instalar dependencias
