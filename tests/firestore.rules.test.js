@@ -332,17 +332,25 @@ describe('cierres', () => {
     await assertSucceeds(deleteDoc(doc(medico, `cierres/CDU_${dateKey(argentinaDate())}`)));
   });
 
-  it('obliga al médico a reabrir antes de corregir un movimiento manual', async () => {
-    await testEnv.withSecurityRulesDisabled(async (context) => {
-      await setDoc(doc(context.firestore(), `cierres/CDU_${dateKey(argentinaDate())}`), {
-        ...closure(),
-        cerradoAt: Timestamp.now(),
-      });
+  it('permite al médico corregir y anular un movimiento manual con la caja cerrada', async () => {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), `cierres/CDU_${dateKey(argentinaDate())}`), {
+      ...closure(),
+      cerradoAt: Timestamp.now(),
     });
-    const medico = testEnv.authenticatedContext('medico').firestore();
-    await assertFails(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {
-      notas: 'Corrección sin reapertura', updatedAt: serverTimestamp(),
-    }));
+  });
+  const cdu = testEnv.authenticatedContext('cdu').firestore();
+  const medico = testEnv.authenticatedContext('medico').firestore();
+
+  await assertFails(updateDoc(doc(cdu, 'movimientos/cdu-hoy'), {
+    notas: 'Intento administrativo con caja cerrada', updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {
+    notas: 'Corrección médica con caja cerrada', updatedAt: serverTimestamp(),
+  }));
+  await assertSucceeds(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {
+    anulado: true, updatedAt: serverTimestamp(),
+  }));
   });
 });
 

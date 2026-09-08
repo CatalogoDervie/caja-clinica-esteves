@@ -217,18 +217,17 @@ service cloud.firestore {
           || (isDoctor() && request.resource.data.source == 'historico-cdu'));
 
       allow update: if activeProfile()
-        && isOwnBranch(resource.data.clinica)
-        && resource.data.clinica == request.resource.data.clinica
-        && resource.data.fecha == request.resource.data.fecha
-        && resource.data.fechaKey == request.resource.data.fechaKey
-        && resource.data.createdAt == request.resource.data.createdAt
-        && resource.data.source == request.resource.data.source
-        && (!resource.data.anulado || request.resource.data.anulado)
-        && (isDoctor() || adminCanWriteToday(resource.data))
-        && request.resource.data.updatedAt == request.time
-        && validMovement(request.resource.data)
-        && (isOpenMovement(resource.data)
-          || (isDoctor() && resource.data.source == 'historico-cdu'));
+      && isOwnBranch(resource.data.clinica)
+      && resource.data.clinica == request.resource.data.clinica
+      && resource.data.fecha == request.resource.data.fecha
+      && resource.data.fechaKey == request.resource.data.fechaKey
+      && resource.data.createdAt == request.resource.data.createdAt
+      && resource.data.source == request.resource.data.source
+      && (!resource.data.anulado || request.resource.data.anulado)
+      && (isDoctor() || adminCanWriteToday(resource.data))
+      && request.resource.data.updatedAt == request.time
+      && validMovement(request.resource.data)
+      && (isOpenMovement(resource.data) || isDoctor());
 
       allow delete: if activeProfile()
         && isDoctor()
