@@ -1,0 +1,144 @@
+name: Aplicar ajuste médico caja cerrada
+
+on:
+  push:
+    branches:
+      - fix/medico-caja-cerrada
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+        with:
+          ref: fix/medico-caja-cerrada
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Preparar Java para Firestore Emulator
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Aplicar cambios
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_exact(path, old, new):
+              file_path = Path(path)
+              text = file_path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: se esperaba 1 coincidencia y se encontraron {count}')
+              file_path.write_text(text.replace(old, new), encoding='utf-8')
+
+          replace_exact(
+              'src/main.js',
+              """function canManageMovement(movement) {
+            if (!movement || movement.anulado || movement.source !== 'manual' || !canOperateSelectedDay()) return false;
+            if (state.closure && state.dayScope !== 'AMBAS') return false;
+            if (state.profile.role === 'medico') return true;
+            return movement.fecha === argentinaDate()
+              && movement.clinica === state.profile.clinica;
+          }""",
+              """function canManageMovement(movement) {
+            if (!movement || movement.anulado || movement.source !== 'manual' || !canOperateSelectedDay()) return false;
+            if (state.profile.role === 'medico') return true;
+            if (state.closure && state.dayScope !== 'AMBAS') return false;
+            return movement.fecha === argentinaDate()
+              && movement.clinica === state.profile.clinica;
+          }""",
+          )
+
+          replace_exact(
+              'src/main.js',
+              """  if (state.closure && movement?.fecha === state.dayDate && movement?.clinica === state.dayScope) {
+            toast('La caja está cerrada. El médico debe reabrirla para corregir.');
+            return;
+          }""",
+              """  if (
+            state.profile.role !== 'medico'
+            && state.closure
+            && movement?.fecha === state.dayDate
+            && movement?.clinica === state.dayScope
+          ) {
+            toast('La caja está cerrada.');
+            return;
+          }""",
+          )
+
+          replace_exact(
+              'firestore.rules',
+              """        && validMovement(request.resource.data)
+                  && (isOpenMovement(resource.data)
+                    || (isDoctor() && resource.data.source == 'historico-cdu'));""",
+              """        && validMovement(request.resource.data)
+                  && (isOpenMovement(resource.data) || isDoctor());""",
+          )
+
+          replace_exact(
+              'tests/firestore.rules.test.js',
+              """  it('obliga al médico a reabrir antes de corregir un movimiento manual', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+              await setDoc(doc(context.firestore(), `cierres/CDU_${dateKey(argentinaDate())}`), {
+                ...closure(),
+                cerradoAt: Timestamp.now(),
+              });
+            });
+            const medico = testEnv.authenticatedContext('medico').firestore();
+            await assertFails(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {
+              notas: 'Corrección sin reapertura', updatedAt: serverTimestamp(),
+            }));
+          });""",
+              """  it('permite al médico corregir y anular un movimiento manual con la caja cerrada', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+              await setDoc(doc(context.firestore(), `cierres/CDU_${dateKey(argentinaDate())}`), {
+                ...closure(),
+                cerradoAt: Timestamp.now(),
+              });
+            });
+            const cdu = testEnv.authenticatedContext('cdu').firestore();
+            const medico = testEnv.authenticatedContext('medico').firestore();
+
+            await assertFails(updateDoc(doc(cdu, 'movimientos/cdu-hoy'), {
+              notas: 'Intento administrativo con caja cerrada', updatedAt: serverTimestamp(),
+            }));
+            await assertSucceeds(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {
+              notas: 'Corrección médica con caja cerrada', updatedAt: serverTimestamp(),
+            }));
+            await assertSucceeds(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {
+              anulado: true, updatedAt: serverTimestamp(),
+            }));
+          });""",
+          )
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Probar lógica y estructura
+        run: npm test
+
+      - name: Probar reglas de Firestore
+        run: npm run test:rules
+
+      - name: Compilar sitio
+        run: npm run build
+
+      - name: Confirmar cambios
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-medico-caja-cerrada-fix.yml
+          git add src/main.js firestore.rules tests/firestore.rules.test.js
+          git commit -m "fix: permitir correcciones médicas con caja cerrada"
+          git push origin HEAD:fix/medico-caja-cerrada
