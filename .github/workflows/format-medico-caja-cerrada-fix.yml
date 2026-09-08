@@ -1,0 +1,111 @@
+name: Formatear ajuste médico caja cerrada
+
+on:
+  push:
+    branches:
+      - fix/medico-caja-cerrada
+
+permissions:
+  contents: write
+
+jobs:
+  format-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+        with:
+          ref: fix/medico-caja-cerrada
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Preparar Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Ajustar formato
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_section(path, start_marker, end_marker, lines):
+              file_path = Path(path)
+              text = file_path.read_text(encoding='utf-8')
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              replacement = '\n'.join(lines)
+              file_path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+
+          replace_section(
+              'firestore.rules',
+              '      allow update: if activeProfile()',
+              '\n\n      allow delete:',
+              [
+                  '      allow update: if activeProfile()',
+                  '        && isOwnBranch(resource.data.clinica)',
+                  '        && resource.data.clinica == request.resource.data.clinica',
+                  '        && resource.data.fecha == request.resource.data.fecha',
+                  '        && resource.data.fechaKey == request.resource.data.fechaKey',
+                  '        && resource.data.createdAt == request.resource.data.createdAt',
+                  '        && resource.data.source == request.resource.data.source',
+                  '        && (!resource.data.anulado || request.resource.data.anulado)',
+                  '        && (isDoctor() || adminCanWriteToday(resource.data))',
+                  '        && request.resource.data.updatedAt == request.time',
+                  '        && validMovement(request.resource.data)',
+                  '        && (isOpenMovement(resource.data) || isDoctor());',
+              ],
+          )
+
+          replace_section(
+              'tests/firestore.rules.test.js',
+              "  it('permite al médico corregir y anular un movimiento manual con la caja cerrada', async () => {",
+              "\n  });\n});\n\ndescribe('concurrencia'",
+              [
+                  "  it('permite al médico corregir y anular un movimiento manual con la caja cerrada', async () => {",
+                  '    await testEnv.withSecurityRulesDisabled(async (context) => {',
+                  "      await setDoc(doc(context.firestore(), `cierres/CDU_${dateKey(argentinaDate())}`), {",
+                  '        ...closure(),',
+                  '        cerradoAt: Timestamp.now(),',
+                  '      });',
+                  '    });',
+                  "    const cdu = testEnv.authenticatedContext('cdu').firestore();",
+                  "    const medico = testEnv.authenticatedContext('medico').firestore();",
+                  '',
+                  "    await assertFails(updateDoc(doc(cdu, 'movimientos/cdu-hoy'), {",
+                  "      notas: 'Intento administrativo con caja cerrada', updatedAt: serverTimestamp(),",
+                  '    }));',
+                  "    await assertSucceeds(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {",
+                  "      notas: 'Corrección médica con caja cerrada', updatedAt: serverTimestamp(),",
+                  '    }));',
+                  "    await assertSucceeds(updateDoc(doc(medico, 'movimientos/cdu-hoy'), {",
+                  '      anulado: true, updatedAt: serverTimestamp(),',
+                  '    }));',
+              ],
+          )
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Probar aplicación
+        run: npm test
+
+      - name: Probar reglas
+        run: npm run test:rules
+
+      - name: Compilar
+        run: npm run build
+
+      - name: Confirmar formato final
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/format-medico-caja-cerrada-fix.yml
+          git add firestore.rules tests/firestore.rules.test.js
+          git commit -m "style: normalizar formato del ajuste de permisos"
+          git push origin HEAD:fix/medico-caja-cerrada
